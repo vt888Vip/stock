@@ -9,23 +9,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import useSWR from 'swr';
-import { Upload } from 'lucide-react';
+import { Upload, Copy, CheckCircle } from 'lucide-react';
 
 export default function DepositPage() {
   const { user, isLoading, isAuthenticated } = useAuth();
-  const [authToken, setAuthToken] = useState<string | null>(null);
   const router = useRouter();
   const { toast } = useToast();
   const [amount, setAmount] = useState('');
   const [bill, setBill] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [billUrl, setBillUrl] = useState<string | null>(null);
-  const [selectedBank, setSelectedBank] = useState('');
   const [isConfirmed, setIsConfirmed] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   // Lấy token từ localStorage
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
-  console.log('Token from localStorage:', token ? token.substring(0, 20) + '...' : 'not found');
 
   // Lấy cài đặt chung của hệ thống
   const { data: settings, error: settingsError } = useSWR(
@@ -45,16 +43,13 @@ export default function DepositPage() {
   const { data: platformBanks, error: platformBanksError } = useSWR(
     user ? '/api/platform/banks' : null,
     async (url: string) => {
-      console.log('Fetching platform banks...');
       const res = await fetch(url, { 
         headers: {
           Authorization: `Bearer ${token}`
         }
       });
-      console.log('Platform banks response status:', res.status);
       if (!res.ok) throw new Error('Failed to fetch platform banks');
       const data = await res.json();
-      console.log('Platform banks data:', data);
       return data;
     }
   );
@@ -113,12 +108,26 @@ export default function DepositPage() {
     }
   };
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      toast({
+        title: 'Đã sao chép',
+        description: 'Đã sao chép vào clipboard',
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Lỗi khi sao chép:', err);
+    }
+  };
+
   const handleSubmit = async () => {
-    if (!amount || !bill || !selectedBank || !isConfirmed) {
+    if (!amount || !bill || !isConfirmed) {
       toast({ 
         variant: 'destructive', 
         title: 'Lỗi', 
-        description: 'Vui lòng chọn ngân hàng, điền số tiền, tải lên bill và xác nhận' 
+        description: 'Vui lòng điền số tiền, tải lên bill và xác nhận' 
       });
       return;
     }
@@ -134,7 +143,6 @@ export default function DepositPage() {
     }
 
     try {
-      console.log('Sending deposit request with token:', token ? 'exists' : 'missing');
       const res = await fetch('/api/deposits', {
         method: 'POST',
         headers: { 
@@ -144,12 +152,10 @@ export default function DepositPage() {
         body: JSON.stringify({
           amount: Number(amount),
           bill: billUrl,
-          bank: selectedBank,
+          bank: platformBanks?.banks?.[0]?.bankName || 'Ngân hàng',
           confirmed: isConfirmed
         }),
       });
-      
-      console.log('Deposit response status:', res.status);
       
       const result = await res.json();
       
@@ -158,6 +164,7 @@ export default function DepositPage() {
         setAmount('');
         setBill(null);
         setBillUrl(null);
+        setIsConfirmed(false);
       } else {
         toast({ variant: 'destructive', title: 'Lỗi', description: result.message || 'Có lỗi xảy ra' });
       }
@@ -175,195 +182,181 @@ export default function DepositPage() {
     return <div className="flex justify-center items-center h-[60vh] text-gray-600">Đang tải...</div>;
   }
 
-  return (
-    <div id="deposit-page" className="min-h-screen bg-gray-900 py-8 px-4">
-      <div className="max-w-2xl mx-auto space-y-6">
-        {/* Thông tin ngân hàng nền tảng */}
-        <Card className="bg-gray-800 border-gray-700 shadow-lg rounded-xl">
-          <CardHeader className="border-b border-gray-700 p-6">
-            <CardTitle className="text-2xl font-semibold text-white">Thông tin ngân hàng nền tảng</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-4">
-            {!platformBanks ? (
-              <div className="text-center py-4 text-gray-400">Đang tải thông tin ngân hàng...</div>
-            ) : platformBanksError ? (
-              <div className="text-red-500">Không thể tải thông tin ngân hàng</div>
-            ) : platformBanks.banks && platformBanks.banks.length > 0 ? (
-              <div className="space-y-4">
-                <p className="text-yellow-400 font-medium">Vui lòng chọn ngân hàng để xem thông tin chuyển khoản:</p>
-                
-                {/* Dropdown chọn ngân hàng */}
-                <div className="mb-4">
-                  <Label className="text-gray-400 block mb-2">Chọn ngân hàng:</Label>
-                  <select
-                    value={selectedBank}
-                    onChange={(e) => setSelectedBank(e.target.value)}
-                    className="flex h-12 w-full rounded-md border border-gray-600 bg-gray-700 px-3 py-2 text-sm text-white placeholder-gray-400 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    <option value="">-- Chọn ngân hàng để xem thông tin --</option>
-                    {platformBanks.banks.map((bank: any, index: number) => (
-                      <option key={index} value={bank.bankName}>
-                        {bank.bankName}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+  const bankInfo = platformBanks?.banks?.[0];
+  const transferContent = `NAP-${user?.username || 'user'}-${new Date().getTime().toString().slice(-6)}`;
 
-                {/* Hiển thị thông tin ngân hàng đã chọn */}
-                {selectedBank && (
-                  <div className="bg-gray-700 p-6 rounded-lg border border-gray-600">
-                    <h3 className="text-xl font-bold text-white mb-4">{selectedBank}</h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <p className="text-gray-400">Chủ tài khoản:</p>
-                        <p className="text-white font-medium text-lg">
-                          {platformBanks.banks.find((b: any) => b.bankName === selectedBank)?.accountHolder}
-                        </p>
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-900 to-blue-900 flex flex-col">
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-md space-y-6">
+          {/* Thông tin ngân hàng */}
+          <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-slate-800">
+                <Upload className="h-4 w-4 text-blue-600" />
+                Thông tin chuyển khoản
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!platformBanks ? (
+                <div className="text-center py-4 text-slate-600">Đang tải thông tin ngân hàng...</div>
+              ) : platformBanksError ? (
+                <div className="text-red-600">Không thể tải thông tin ngân hàng</div>
+              ) : bankInfo ? (
+                <div className="space-y-3">
+                  <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
+                    <h3 className="text-lg font-bold text-emerald-800 mb-3">{bankInfo.bankName}</h3>
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-600 text-sm font-medium">Chủ tài khoản:</span>
+                        <span className="font-semibold text-sm text-slate-800">{bankInfo.accountHolder}</span>
                       </div>
-                      <div>
-                        <p className="text-gray-400">Số tài khoản:</p>
-                        <p className="text-white font-medium text-lg font-mono">
-                          {platformBanks.banks.find((b: any) => b.bankName === selectedBank)?.accountNumber}
-                        </p>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-600 text-sm font-medium">Số tài khoản:</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-sm font-bold text-slate-800 bg-slate-100 px-2 py-1 rounded">{bankInfo.accountNumber}</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => copyToClipboard(bankInfo.accountNumber)}
+                            className="h-6 w-6 p-0 border-slate-300 hover:bg-slate-100"
+                          >
+                            {copied ? <CheckCircle className="h-3 w-3 text-green-600" /> : <Copy className="h-3 w-3 text-slate-600" />}
+                          </Button>
+                        </div>
                       </div>
-                      {platformBanks.banks.find((b: any) => b.bankName === selectedBank)?.branch && (
-                        <div>
-                          <p className="text-gray-400">Chi nhánh:</p>
-                          <p className="text-white">
-                            {platformBanks.banks.find((b: any) => b.bankName === selectedBank)?.branch}
-                          </p>
+                      {bankInfo.branch && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-sm font-medium">Chi nhánh:</span>
+                          <span className="text-sm text-slate-700">{bankInfo.branch}</span>
                         </div>
                       )}
-                      <div>
-                        <p className="text-gray-400">Nội dung chuyển khoản:</p>
-                        <p className="text-white font-mono bg-gray-800 px-3 py-2 rounded border">
-                          NAP-{user?.username || 'user'}-{new Date().getTime().toString().slice(-6)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-4 p-3 bg-amber-900/20 border border-amber-500/30 rounded">
-                      <p className="text-amber-400 text-sm">
-                        <strong>Lưu ý:</strong> Vui lòng ghi rõ nội dung chuyển khoản như trên để chúng tôi có thể xác nhận nhanh chóng.
-                      </p>
                     </div>
                   </div>
-                )}
-              </div>
-            ) : (
-              <p className="text-gray-400">Hiện tại chưa có thông tin ngân hàng nền tảng.</p>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Form nạp tiền */}
-        <Card className="bg-gray-800 border-gray-700 shadow-lg rounded-xl">
-          <CardHeader className="border-b border-gray-700 p-6">
-            <CardTitle className="text-2xl font-semibold text-white">Nạp tiền</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-6">
-            <div>
-              <h3 className="text-lg font-medium text-gray-300 mb-4">Thông tin nạp tiền</h3>
-              
-              {/* Nhắc nhở chọn ngân hàng */}
-              {!selectedBank && (
-                <div className="mb-4 p-3 bg-blue-900/20 border border-blue-500/30 rounded">
-                  <p className="text-blue-400 text-sm">
-                    <strong>Lưu ý:</strong> Vui lòng chọn ngân hàng ở phía trên trước khi điền thông tin nạp tiền.
-                  </p>
+                  
+                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                    <p className="text-blue-800 text-sm font-semibold mb-3">Nội dung chuyển khoản:</p>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm bg-white px-3 py-2 rounded-lg border border-blue-200 flex-1 text-slate-800 font-medium">
+                        {transferContent}
+                      </span>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => copyToClipboard(transferContent)}
+                        className="h-8 w-8 p-0 border-blue-300 hover:bg-blue-50"
+                      >
+                        {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-blue-600" />}
+                      </Button>
+                    </div>
+                  </div>
+                  
+                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200 shadow-sm">
+                    <p className="text-amber-800 text-xs font-medium">
+                      <strong>💡 Lưu ý:</strong> Vui lòng ghi rõ nội dung chuyển khoản như trên để chúng tôi có thể xác nhận nhanh chóng.
+                    </p>
+                  </div>
                 </div>
+              ) : (
+                <p className="text-slate-600 text-center">Hiện tại chưa có thông tin ngân hàng.</p>
               )}
-              
-              <div className="mb-4">
-                <Label className="text-gray-400">Số tiền nạp (VND)</Label>
+            </CardContent>
+          </Card>
+
+          {/* Form nạp tiền */}
+          <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-base text-slate-800">
+                <Upload className="h-4 w-4 text-blue-600" />
+                Nạp tiền
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label className="text-slate-700 text-sm font-medium">Số tiền nạp (VND)</Label>
                 <Input
                   type="number"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
                   placeholder="Nhập số tiền"
-                  className="bg-gray-700 text-white border-gray-600 focus:border-blue-500"
+                  className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                   min={settings?.minDeposit || 0}
                   max={settings?.maxDeposit || 100000000}
                   required
                 />
                 {settings && (
-                  <p className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-slate-500 mt-1">
                     Số tiền từ {settings.minDeposit?.toLocaleString()} - {settings.maxDeposit?.toLocaleString()} VND
                   </p>
                 )}
               </div>
-            </div>
 
-            <div>
-              <Label className="text-gray-400">Tải lên bill chuyển khoản</Label>
-              <div className="space-y-2">
-                <div className="flex items-center gap-4">
+              <div>
+                <Label className="text-slate-700 text-sm font-medium">Tải lên bill chuyển khoản</Label>
+                <div className="space-y-2">
                   <Input
                     type="file"
                     accept="image/*"
                     onChange={handleFileChange}
                     disabled={isUploading}
-                    className="bg-gray-700 text-white border-gray-600 focus:border-blue-500 file:bg-gray-600 file:text-white file:hover:bg-gray-500 disabled:opacity-50"
+                    className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 file:bg-slate-100 file:text-slate-700 file:border-0 file:rounded file:px-3 file:py-1 file:hover:bg-slate-200"
                   />
+                  
+                  {isUploading && (
+                    <div className="flex items-center text-sm text-blue-600">
+                      <div className="h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Đang tải lên ảnh...
+                    </div>
+                  )}
+                  
+                  {bill && !isUploading && billUrl && (
+                    <div className="text-sm text-green-600 font-medium">
+                      ✓ Đã tải lên: {bill.name}
+                    </div>
+                  )}
+                  
+                  {bill && !isUploading && !billUrl && (
+                    <div className="text-sm text-amber-600 font-medium">
+                      Lỗi khi tải lên. Vui lòng thử lại.
+                    </div>
+                  )}
                 </div>
-                
-                {isUploading && (
-                  <div className="flex items-center text-sm text-blue-400">
-                    <div className="h-4 w-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mr-2"></div>
-                    Đang tải lên ảnh...
-                  </div>
-                )}
-                
-                {bill && !isUploading && billUrl && (
-                  <div className="text-sm text-green-400">
-                    ✓ Đã tải lên: {bill.name}
-                  </div>
-                )}
-                
-                {bill && !isUploading && !billUrl && (
-                  <div className="text-sm text-yellow-400">
-                    Lỗi khi tải lên. Vui lòng thử lại.
-                  </div>
-                )}
               </div>
-            </div>
-            <div className="flex items-start space-x-2 mt-4">
-              <input
-                type="checkbox"
-                id="confirm-deposit"
-                checked={isConfirmed}
-                onChange={(e) => setIsConfirmed(e.target.checked)}
-                className="mt-1 h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
-                required
-              />
-              <label htmlFor="confirm-deposit" className="text-sm text-gray-300">
-                Tôi xác nhận đã chuyển khoản chính xác số tiền và nội dung như trên. Yêu cầu nạp tiền sẽ được xử lý trong vòng 5-15 phút sau khi xác nhận.
-              </label>
-            </div>
 
-            <Button
-              className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-md transition-colors disabled:bg-gray-500 disabled:cursor-not-allowed mt-4"
-              onClick={handleSubmit}
-              disabled={!amount || !bill || isUploading || !billUrl || !selectedBank || !isConfirmed}
-            >
-              {isUploading ? (
-                <>
-                  <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
-                  Đang xử lý...
-                </>
-              ) : !selectedBank ? (
-                <>
-                  <Upload className="h-5 w-5 mr-2" />
-                  Vui lòng chọn ngân hàng
-                </>
-              ) : (
-                <>
-                  <Upload className="h-5 w-5 mr-2" />
-                  Gửi yêu cầu
-                </>
-              )}
-            </Button>
-          </CardContent>
-        </Card>
+              <div className="flex items-start space-x-3">
+                <input
+                  type="checkbox"
+                  id="confirm-deposit"
+                  checked={isConfirmed}
+                  onChange={(e) => setIsConfirmed(e.target.checked)}
+                  className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  required
+                />
+                <label htmlFor="confirm-deposit" className="text-sm text-slate-700 leading-relaxed">
+                  Tôi xác nhận đã chuyển khoản chính xác số tiền và nội dung như trên. Yêu cầu nạp tiền sẽ được xử lý trong vòng 5-15 phút sau khi xác nhận.
+                </label>
+              </div>
+
+              <Button
+                className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                onClick={handleSubmit}
+                disabled={!amount || !bill || isUploading || !billUrl || !isConfirmed}
+              >
+                {isUploading ? (
+                  <>
+                    <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                    Đang xử lý...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-5 w-5 mr-2" />
+                    Gửi yêu cầu nạp tiền
+                  </>
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     </div>
   );

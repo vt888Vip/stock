@@ -137,10 +137,13 @@ export async function POST(request: Request) {
 
     // Lấy dữ liệu từ request body
     const data = await request.json();
+    console.log('Received bank info data:', data);
+    
     const { name, accountHolder, accountNumber } = data;
     
     // Kiểm tra dữ liệu hợp lệ
     if (!name || !accountHolder || !accountNumber) {
+      console.log('Missing required fields:', { name: !!name, accountHolder: !!accountHolder, accountNumber: !!accountNumber });
       return NextResponse.json({ message: 'Thông tin không đầy đủ' }, { status: 400 });
     }
 

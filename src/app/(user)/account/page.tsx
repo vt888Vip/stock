@@ -1,65 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, ChangeEvent, FormEvent } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Wallet, ArrowUpRight, ArrowDownRight, User, Calendar, Shield, CheckCircle, XCircle, Clock, Building2, CreditCard, Lock, Settings, Upload, Camera } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
-;
-import { Menu, X, Loader2, Upload, CheckCircle, XCircle, UploadCloud } from 'lucide-react';
-
-type TabType = 'overview' | 'account' | 'bank' | 'verify' | 'password';
-
-interface BankForm {
-  fullName: string;
-  bankType: string;
-  bankName: string;
-  accountNumber: string;
-}
-
-interface PasswordForm {
-  currentPassword: string;
-  newPassword: string;
-  confirmPassword: string;
-}
-
-interface UploadStatus {
-  success: boolean;
-  message: string;
-}
-
-interface UploadState {
-  front: UploadStatus | null;
-  back: UploadStatus | null;
-}
-
-interface BankInfo {
-  accountHolder: string;
-  name: string;
-  bankName: string;
-  accountNumber: string;
-  accountType?: string;
-  bankType?: string;
-  bankCode?: string;
-  verified?: boolean;
-}
-
-interface VerificationData {
-  verified: boolean;
-  cccdFront: string;
-  cccdBack: string;
-  submittedAt?: string;
-  status?: 'pending' | 'approved' | 'rejected';
-  reviewedAt?: string;
-  reviewedBy?: string;
-  rejectionReason?: string;
-}
-
-interface BalanceInfo {
-  available: number;
-  locked?: number;
-  total?: number;
-}
 
 interface User {
   _id?: string;
@@ -68,1340 +19,1026 @@ interface User {
   email?: string;
   phone?: string;
   fullName?: string;
-  address?: string;
-  dateOfBirth?: string;
-  gender?: string;
-  bankInfo?: BankInfo;
-  bank?: BankInfo;
-  verification?: VerificationData;
-  balance?: BalanceInfo | number;
+  balance?: number | { available: number; frozen: number; total: number };
   createdAt?: string;
-  updatedAt?: string;
+  verification?: {
+    verified: boolean;
+    status?: 'pending' | 'approved' | 'rejected';
+    cccdFront?: string;
+    cccdBack?: string;
+  };
+  bank?: {
+    name?: string;
+    accountNumber?: string;
+    accountHolder?: string;
+  };
 }
 
 interface AuthContextType {
   user: User | null;
   isLoading: boolean;
-  login: (username: string, password: string) => Promise<{ success: boolean; message?: string }>;
-  logout: () => Promise<void>;
-  isAuthenticated: () => boolean;
-  isAdmin: () => boolean;
   refreshUser: () => Promise<void>;
 }
 
 export default function AccountPage() {
-  const { user, isLoading, logout, refreshUser } = useAuth() as AuthContextType;
+  const { user, isLoading, refreshUser } = useAuth() as AuthContextType;
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const toastVariant = {
-    default: 'default' as const,
-    destructive: 'destructive' as const,
-    success: 'success' as const,
-    error: 'destructive' as const,
-  } as const;
-
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isClient, setIsClient] = useState(false);
-  const [verificationStatus, setVerificationStatus] = useState<VerificationData>({
-    verified: false,
-    cccdFront: '',
-    cccdBack: '',
-    submittedAt: '',
-    status: undefined,
-    reviewedAt: undefined,
-    reviewedBy: undefined,
-    rejectionReason: undefined
-  });
-
-  const [frontIdFile, setFrontIdFile] = useState<File | null>(null);
-  const [backIdFile, setBackIdFile] = useState<File | null>(null);
+  const [balance, setBalance] = useState<number>(0);
+  const [activeTab, setActiveTab] = useState('overview');
+  
+  // Verification form states
+  const [fullName, setFullName] = useState('');
+  const [frontImage, setFrontImage] = useState<File | null>(null);
+  const [backImage, setBackImage] = useState<File | null>(null);
+  const [frontPreview, setFrontPreview] = useState<string>('');
+  const [backPreview, setBackPreview] = useState<string>('');
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<UploadState>({
-    front: null,
-    back: null
-  });
+  const frontInputRef = useRef<HTMLInputElement>(null);
+  const backInputRef = useRef<HTMLInputElement>(null);
 
-  const [bankForm, setBankForm] = useState<BankInfo>({
-    accountHolder: user?.bankInfo?.accountHolder || user?.bank?.accountHolder || '',
-    name: user?.bankInfo?.name || user?.bank?.name || '',
-    bankName: user?.bankInfo?.bankName || user?.bank?.bankName || '',
-    accountNumber: user?.bankInfo?.accountNumber || user?.bank?.accountNumber || '',
-    accountType: user?.bankInfo?.accountType || 'savings',
-    bankType: user?.bankInfo?.bankType || '',
-    bankCode: user?.bankInfo?.bankCode || '',
-    verified: user?.bankInfo?.verified || false
+  // Bank form states
+  const [bankForm, setBankForm] = useState({
+    accountHolder: '',
+    bankName: '',
+    accountNumber: ''
   });
+  const [isSavingBank, setIsSavingBank] = useState(false);
 
-  const [passwordForm, setPasswordForm] = useState<PasswordForm>({
+  // Password form states
+  const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
     newPassword: '',
     confirmPassword: ''
   });
-
-  // Form thông tin tài khoản
-  const [accountForm, setAccountForm] = useState({
-    fullName: user?.fullName || '',
-    phone: user?.phone || '',
-    address: user?.address || '',
-    dateOfBirth: user?.dateOfBirth || '',
-    gender: user?.gender || ''
-  });
-
-  // Vô hiệu hóa chức năng chỉnh sửa thông tin ngân hàng
-  const [isEditingBankInfo, setIsEditingBankInfo] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
-  const [passwordError, setPasswordError] = useState('');
-  
-  // Trạng thái khóa chỉnh sửa sau khi đã cập nhật
-  const [isBankInfoLocked, setIsBankInfoLocked] = useState(false);
-  const [isAccountInfoLocked, setIsAccountInfoLocked] = useState(false);
-
-  useEffect(() => {
-    if (user?.verification) {
-      setVerificationStatus({
-        verified: user.verification.verified || false,
-        cccdFront: user.verification.cccdFront || '',
-        cccdBack: user.verification.cccdBack || '',
-        submittedAt: user.verification.submittedAt || '',
-        status: user.verification.status || undefined,
-        reviewedAt: user.verification.reviewedAt || undefined,
-        reviewedBy: user.verification.reviewedBy || undefined,
-        rejectionReason: user.verification.rejectionReason || undefined
-      });
-    }
-    
-    // Cập nhật form thông tin tài khoản
-    setAccountForm({
-      fullName: user?.fullName || '',
-      phone: user?.phone || '',
-      address: user?.address || '',
-      dateOfBirth: user?.dateOfBirth || '',
-      gender: user?.gender || ''
-    });
-
-    // Cập nhật form thông tin ngân hàng
-    setBankForm({
-      accountHolder: user?.bank?.accountHolder || user?.bankInfo?.accountHolder || '',
-      name: user?.bank?.name || user?.bankInfo?.name || '',
-      bankName: user?.bank?.bankName || user?.bankInfo?.bankName || '',
-      accountNumber: user?.bank?.accountNumber || user?.bankInfo?.accountNumber || '',
-      accountType: user?.bank?.accountType || user?.bankInfo?.accountType || 'savings',
-      bankType: user?.bank?.bankType || user?.bankInfo?.bankType || '',
-      bankCode: user?.bank?.bankCode || user?.bankInfo?.bankCode || '',
-      verified: user?.bank?.verified || user?.bankInfo?.verified || false
-    });
-    
-    // Kiểm tra xem thông tin ngân hàng đã được cập nhật chưa
-    const hasBankInfo = user?.bank?.name || user?.bankInfo?.name || user?.bank?.accountHolder || user?.bankInfo?.accountHolder;
-    if (hasBankInfo) {
-      setIsBankInfoLocked(true);
-      console.log('Bank info locked:', hasBankInfo);
-    }
-    
-    // Kiểm tra xem thông tin tài khoản đã được cập nhật chưa
-    const hasAccountInfo = user?.fullName || user?.phone || user?.address || user?.dateOfBirth || user?.gender;
-    if (hasAccountInfo) {
-      setIsAccountInfoLocked(true);
-      console.log('Account info locked:', hasAccountInfo);
-    }
-  }, [user]);
-
-  const isVerified = verificationStatus.verified;
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      try {
-        console.log('Checking authentication status...');
-        
-        // Lấy token từ localStorage
-        const token = localStorage.getItem('token') || localStorage.getItem('authToken');
-        
-        const res = await fetch('/api/auth/me', {
-          method: 'GET',
-          credentials: 'include', // Vẫn giữ để tương thích với phiên bản cũ
-          headers: {
-            'Cache-Control': 'no-cache, no-store, must-revalidate',
-            'Pragma': 'no-cache',
-            'Expires': '0',
-            // Thêm token vào header nếu có
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          }
-        });
-        
-        // Xử lý response
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.success && data.user) {
-            console.log('User authenticated:', data.user.username);
-            // Cập nhật user state nếu cần
-          } else {
-            console.log('No user in auth response:', data);
-            // Xử lý khi không có user
-          }
-        } else {
-          console.log('Auth check failed with status:', res.status);
-          // Xử lý khi API trả về lỗi
-        }
-      } catch (error) {
-        console.error('Failed to refresh user data:', error);
-      }
-    };
-  
-    checkAuth();
-  }, [user, refreshUser]);
-
-  useEffect(() => {
-    setIsClient(true);
-  }, []);
-
-  const getBalance = (balance: number | BalanceInfo | undefined): number => {
-    if (balance === undefined) return 0;
-    if (typeof balance === 'number') return balance;
-    if (balance && 'available' in balance) return Number(balance.available) || 0;
-    return 0;
-  };
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
 
   const formatCurrency = (amount: number): string => {
+    if (isNaN(amount) || amount === null || amount === undefined) {
+      return '0 ₫';
+    }
     return new Intl.NumberFormat('vi-VN', {
       style: 'currency',
       currency: 'VND',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0
+      maximumFractionDigits: 0,
     }).format(amount);
   };
 
-  const getToken = (): string | null => {
-    if (typeof window === 'undefined') return null;
-    
-    // Try to get token from localStorage first
-    const token = localStorage.getItem('authToken');
-    if (token) return token;
-    
-    // If still not found, try to get it from cookies
-    const cookies = document.cookie.split(';').reduce((cookies, cookie) => {
-      const [name, value] = cookie.split('=').map(c => c.trim());
-      cookies[name] = value;
-      return cookies;
-    }, {} as Record<string, string>);
-    
-    return cookies.authToken || null;
-  };
-
   const formatDate = (dateString?: string): string => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return `${date.getDate().toString().padStart(2, '0')}/${(date.getMonth() + 1).toString().padStart(2, '0')}/${date.getFullYear()} ${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+    if (!dateString) return 'N/A';
+    return new Date(dateString).toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'front' | 'back') => {
-    const file = e.target.files?.[0];
+  const getVerificationStatus = () => {
+    if (!user?.verification) return { status: 'unverified', label: 'Chưa xác minh', color: 'bg-gray-500', icon: <XCircle className="h-4 w-4" /> };
+    
+    if (user.verification.verified) {
+      return { status: 'verified', label: 'Đã xác minh', color: 'bg-green-500', icon: <CheckCircle className="h-4 w-4" /> };
+    }
+    
+    switch (user.verification.status) {
+      case 'pending':
+        return { status: 'pending', label: 'Đang xử lý', color: 'bg-yellow-500', icon: <Clock className="h-4 w-4" /> };
+      case 'rejected':
+        return { status: 'rejected', label: 'Từ chối', color: 'bg-red-500', icon: <XCircle className="h-4 w-4" /> };
+      default:
+        return { status: 'unverified', label: 'Chưa xác minh', color: 'bg-gray-500', icon: <XCircle className="h-4 w-4" /> };
+    }
+  };
+
+  // Lấy balance từ user object
+  const getUserBalance = () => {
+    if (!user) return 0;
+    
+    console.log('User balance object:', user.balance); // Debug log
+    
+    if (typeof user.balance === 'number') {
+      return user.balance;
+    }
+    
+    if (user.balance && typeof user.balance === 'object') {
+      return user.balance.available || 0;
+    }
+    
+    return 0;
+  };
+
+  useEffect(() => {
+    if (user) {
+      const userBalance = getUserBalance();
+      console.log('Calculated balance:', userBalance); // Debug log
+      setBalance(userBalance);
+    }
+  }, [user]);
+
+  // Xử lý tab từ URL params
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTab(tab);
+    }
+  }, [searchParams]);
+
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    router.push(`/account?tab=${value}`);
+  };
+
+  const handleDeposit = () => {
+    router.push('/deposit');
+  };
+
+  const handleWithdraw = () => {
+    router.push('/withdraw');
+  };
+
+  // Handle file selection
+  const handleFileSelect = (file: File, type: 'front' | 'back') => {
     if (!file) return;
 
-    if (!['image/jpeg', 'image/png'].includes(file.type)) {
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
       toast({
-        title: 'Lỗi',
-        description: 'Chỉ chấp nhận file ảnh định dạng JPG hoặc PNG',
         variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Chỉ chấp nhận file ảnh (JPG, PNG)',
       });
       return;
     }
 
+    // Validate file size (5MB)
     if (file.size > 5 * 1024 * 1024) {
       toast({
-        title: 'Lỗi',
-        description: 'Kích thước file tối đa là 5MB',
         variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Kích thước file không được vượt quá 5MB',
       });
       return;
     }
 
+    // Create preview
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
     if (type === 'front') {
-      setFrontIdFile(file);
-      setUploadStatus(prev => ({ ...prev, front: null }));
+        setFrontImage(file);
+        setFrontPreview(result);
     } else {
-      setBackIdFile(file);
-      setUploadStatus(prev => ({ ...prev, back: null }));
-    }
+        setBackImage(file);
+        setBackPreview(result);
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
-  const handleUpload = async (type: 'front' | 'back') => {
-    const file = type === 'front' ? frontIdFile : backIdFile;
-    if (!file) {
-      toast({
-        title: 'Lỗi',
-        description: 'Vui lòng chọn tệp để tải lên',
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    // Check authentication first
-    const token = getToken();
-    if (!token) {
-      toast({
-        title: 'Lỗi xác thực',
-        description: 'Vui lòng đăng nhập lại để tiếp tục',
-        variant: 'destructive',
-      });
-      router.push('/login');
-      return;
-    }
+  // Handle file upload
+  const handleUpload = async (file: File, type: 'front' | 'back') => {
+    if (!file) return;
 
     setIsUploading(true);
-    setUploadStatus(prev => ({ ...prev, [type]: { status: 'uploading' } }));
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
 
+    try {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('type', type);
 
-    try {
-      // Get fresh token on each request
-      const token = getToken();
-      if (!token) {
-        throw new Error('Không tìm thấy thông tin xác thực. Vui lòng đăng nhập lại.');
-      }
-
-      // Add cache-control headers to prevent caching
-      const headers = new Headers();
-      headers.append('Authorization', `Bearer ${token}`);
-      headers.append('Cache-Control', 'no-cache, no-store, must-revalidate');
-      headers.append('Pragma', 'no-cache');
-      headers.append('Expires', '0');
-
       const response = await fetch('/api/upload-verification', {
         method: 'POST',
-        headers: headers,
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
         body: formData,
-        credentials: 'include', // Include cookies in the request
-        cache: 'no-store' // Prevent caching
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.message || 'Có lỗi xảy ra khi tải lên ảnh');
-      }
+      const result = await response.json();
 
-      const data = await response.json();
-      setVerificationStatus(prev => ({
-        ...prev,
-        [type === 'front' ? 'cccdFront' : 'cccdBack']: data.url,
-        status: 'pending',
-        submittedAt: new Date().toISOString()
-      }));
-
-      // Refresh user data after successful upload
-      await refreshUser();
-      
+      if (response.ok) {
       toast({
         title: 'Thành công',
-        description: `Đã tải lên ảnh ${type === 'front' ? 'mặt trước' : 'mặt sau'} thành công`,
-        variant: 'default',
+          description: `Đã tải lên ${type === 'front' ? 'mặt trước' : 'mặt sau'} CCCD`,
       });
       
-      // Reset the file input
-      if (type === 'front') {
-        setFrontIdFile(null);
+        // Refresh user data to get updated verification status
+        await refreshUser();
       } else {
-        setBackIdFile(null);
+        toast({
+          variant: 'destructive',
+          title: 'Lỗi',
+          description: result.message || 'Không thể tải lên file',
+        });
       }
-
-      setUploadStatus(prev => ({
-        ...prev,
-        [type]: { success: true, message: 'Tải lên thành công' }
-      }));
     } catch (error) {
-      console.error(`Lỗi khi tải lên ảnh ${type === 'front' ? 'mặt trước' : 'mặt sau'}:`, error);
-      
       toast({
-        title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi tải lên ảnh',
         variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Không thể tải lên file',
       });
-
-      setUploadStatus(prev => ({
-        ...prev,
-        [type]: { success: false, message: error instanceof Error ? error.message : 'Có lỗi xảy ra' }
-      }));
     } finally {
       setIsUploading(false);
     }
   };
 
-  const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setPasswordForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-
-    if (passwordError) {
-      setPasswordError('');
-    }
-  };
-
-  const handleBankInfoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setBankForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleBankFormChange = handleBankInfoChange;
-
-  const handleAccountInfoChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setAccountForm(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const handleSubmitAccountInfo = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Không tìm thấy token xác thực');
-      }
-
-      const response = await fetch('/api/update-account-info', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(accountForm)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Có lỗi xảy ra khi cập nhật thông tin tài khoản');
-      }
-
-      const data = await response.json();
-
-      // Cập nhật user state ngay lập tức với thông tin mới
-      if (data.user) {
-        // Cập nhật local state nếu cần
-        console.log('Account info updated successfully');
-      }
-
-      // Khóa chỉnh sửa sau khi cập nhật thành công
-      setIsAccountInfoLocked(true);
-
+  // Handle form submission
+  const handleSubmitVerification = async () => {
+    if (!fullName.trim()) {
       toast({
-        title: 'Thành công',
-        description: 'Cập nhật thông tin tài khoản thành công. Thông tin này không thể chỉnh sửa sau này.',
-        variant: 'default',
-      });
-      
-      // Refresh user data để đảm bảo đồng bộ
-      await refreshUser();
-    } catch (error) {
-      console.error('Update account info error:', error);
-      toast({
-        title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật thông tin tài khoản',
         variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSubmitBankInfo = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    try {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Không tìm thấy token xác thực');
-      }
-
-      const response = await fetch('/api/update-bank-info', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
-        body: JSON.stringify(bankForm)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Có lỗi xảy ra khi cập nhật thông tin ngân hàng');
-      }
-
-      const data = await response.json();
-
-      // Cập nhật user state ngay lập tức với thông tin mới
-      if (data.user) {
-        // Cập nhật local state nếu cần
-        console.log('Bank info updated successfully');
-      }
-
-      // Khóa chỉnh sửa sau khi cập nhật thành công
-      setIsBankInfoLocked(true);
-      setIsEditingBankInfo(false);
-
-      toast({
-        title: 'Thành công',
-        description: 'Cập nhật thông tin ngân hàng thành công. Thông tin này không thể chỉnh sửa sau này.',
-        variant: 'default',
-      });
-      
-      // Refresh user data để đảm bảo đồng bộ
-      await refreshUser();
-    } catch (error) {
-      console.error('Update bank info error:', error);
-      toast({
         title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi cập nhật thông tin ngân hàng',
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const handleSubmitPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
-      toast({
-        title: 'Lỗi',
-        description: 'Mật khẩu mới và xác nhận mật khẩu không khớp',
-        variant: 'destructive',
+        description: 'Vui lòng nhập họ tên đầy đủ',
       });
       return;
     }
 
-    try {
-      const token = getToken();
-      if (!token) {
-        throw new Error('Không tìm thấy token xác thực');
-      }
+    if (!frontImage || !backImage) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng tải lên đủ 2 mặt CCCD',
+      });
+      return;
+    }
 
+    setIsUploading(true);
+
+    try {
+      // Upload front image
+      await handleUpload(frontImage, 'front');
+      
+      // Upload back image
+      await handleUpload(backImage, 'back');
+
+      toast({
+        title: 'Thành công',
+        description: 'Đã gửi yêu cầu xác minh. Vui lòng chờ admin duyệt.',
+      });
+
+      // Reset form
+      setFullName('');
+      setFrontImage(null);
+      setBackImage(null);
+      setFrontPreview('');
+      setBackPreview('');
+      
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Không thể gửi yêu cầu xác minh',
+      });
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Handle bank form submission
+  const handleSubmitBank = async () => {
+    if (!bankForm.accountHolder.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng nhập tên chủ tài khoản',
+      });
+      return;
+    }
+
+    if (!bankForm.bankName.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng nhập tên ngân hàng',
+      });
+      return;
+    }
+
+    if (!bankForm.accountNumber.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng nhập số tài khoản',
+      });
+      return;
+    }
+
+    setIsSavingBank(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
+
+    try {
+      const response = await fetch('/api/users/bank-info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          accountHolder: bankForm.accountHolder.trim(),
+          name: bankForm.bankName.trim(),
+          accountNumber: bankForm.accountNumber.trim()
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+      toast({
+        title: 'Thành công',
+          description: 'Đã lưu thông tin ngân hàng',
+        });
+        
+        // Reset form
+        setBankForm({
+          accountHolder: '',
+          bankName: '',
+          accountNumber: ''
+        });
+        
+        // Refresh user data
+      await refreshUser();
+      } else {
+      toast({
+          variant: 'destructive',
+        title: 'Lỗi',
+          description: result.message || 'Không thể lưu thông tin ngân hàng',
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Không thể lưu thông tin ngân hàng',
+      });
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  // Handle password change
+  const handleChangePassword = async () => {
+    if (!passwordForm.currentPassword.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng nhập mật khẩu hiện tại',
+      });
+      return;
+    }
+
+    if (!passwordForm.newPassword.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Vui lòng nhập mật khẩu mới',
+      });
+      return;
+    }
+
+    if (passwordForm.newPassword.length < 6) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Mật khẩu mới phải có ít nhất 6 ký tự',
+      });
+      return;
+    }
+
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Mật khẩu xác nhận không khớp',
+      });
+      return;
+    }
+
+    setIsChangingPassword(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
+
+    try {
       const response = await fetch('/api/change-password', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
           currentPassword: passwordForm.currentPassword,
-          newPassword: passwordForm.newPassword
-        })
+          newPassword: passwordForm.newPassword,
+        }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || 'Có lỗi xảy ra khi đổi mật khẩu');
-      }
+      const result = await response.json();
 
+      if (response.ok) {
+        toast({
+          title: 'Thành công',
+          description: 'Đã đổi mật khẩu thành công',
+        });
+        
+        // Reset form
       setPasswordForm({
         currentPassword: '',
         newPassword: '',
         confirmPassword: ''
       });
-
+      } else {
       toast({
-        title: 'Thành công',
-        description: 'Đổi mật khẩu thành công',
-        variant: 'default',
-      });
+          variant: 'destructive',
+          title: 'Lỗi',
+          description: result.message || 'Không thể đổi mật khẩu',
+        });
+      }
     } catch (error) {
-      console.error('Change password error:', error);
       toast({
-        title: 'Lỗi',
-        description: error instanceof Error ? error.message : 'Có lỗi xảy ra khi đổi mật khẩu',
         variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Không thể đổi mật khẩu',
       });
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
-  // Handle authentication state and redirects
-  useEffect(() => {
-    // Only run on client side
-    if (typeof window === 'undefined') return;
+  const verificationStatus = getVerificationStatus();
+  const hasBankInfo = user?.bank?.name && user?.bank?.accountNumber && user?.bank?.accountHolder;
 
-    // Check if we're already on the login page to prevent loops
-    const isLoginPage = window.location.pathname === '/login';
-    const token = getToken();
-    
-    // If no token and not on login page, redirect to login
-    if (!token && !isLoginPage) {
-      // Store the current URL to return after login
-      const returnUrl = window.location.pathname + window.location.search;
-      router.push(`/login?returnUrl=${encodeURIComponent(returnUrl)}`);
-      return;
-    }
-
-    // If we have a token but no user data yet, try to refresh
-    if (token && !user && !isLoading) {
-      refreshUser().catch(() => {
-        // If refresh fails, clear invalid token and redirect to login
-        localStorage.removeItem('authToken');
-        router.push('/login');
-      });
-    }
-  }, [user, isLoading, router, refreshUser]);
-
-  // Show loading state only when we're still loading and have a token
-  if ((isLoading && getToken()) || (!user && getToken())) {
+  if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-900 flex justify-center items-center">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <Loader2 className="w-8 h-8 mx-auto mb-4 text-blue-500 animate-spin" />
-          <p className="text-gray-400">Đang tải thông tin tài khoản...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Đang tải...</p>
         </div>
       </div>
     );
   }
 
-  // If no user and no token, we'll be redirected by the useEffect
   if (!user) {
-    return null;
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">Vui lòng đăng nhập để xem thông tin</p>
+          <Button onClick={() => router.push('/login')} className="mt-4">
+            Đăng nhập
+          </Button>
+        </div>
+      </div>
+    );
   }
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white p-4 md:p-8">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex flex-col md:flex-row gap-6">
-          {/* Sidebar - Hidden on mobile, shown on desktop */}
-          <div className="hidden md:block w-64 flex-shrink-0">
-            <div className="bg-gray-800 rounded-lg p-4 sticky top-4">
-              <div className="flex items-center space-x-3 mb-6">
-                <div className="bg-blue-600 w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold">
-                  {user?.username?.charAt(0).toUpperCase() || 'U'}
+    <div className="min-h-screen bg-gradient-to-br from-slate-800 via-slate-900 to-blue-900 flex flex-col">
+      {/* Header */}
+      <div className="bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-lg">
+        <div className="max-w-2xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-blue-500 to-purple-600 rounded-lg">
+                <User className="h-5 w-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="font-medium">{user.username}</h2>
-                  <p className="text-sm text-gray-400">{user.email}</p>
+                <h1 className="text-lg font-bold text-slate-800">Quản lý tài khoản</h1>
+                <p className="text-xs text-slate-500">Quản lý thông tin và cài đặt</p>
                 </div>
               </div>
-              
-              <nav className="space-y-1">
-                <button
-                  onClick={() => setActiveTab('overview')}
-                  className={`w-full text-left px-4 py-2 rounded-md ${activeTab === 'overview' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                >
-                  Tổng quan
-                </button>
-                <button
-                  onClick={() => setActiveTab('account')}
-                  className={`w-full text-left px-4 py-2 rounded-md ${activeTab === 'account' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                >
-                  Thông tin tài khoản
-                </button>
-                <button
-                  onClick={() => setActiveTab('bank')}
-                  className={`w-full text-left px-4 py-2 rounded-md ${activeTab === 'bank' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                >
-                  Thông tin ngân hàng
-                </button>
-                <button
-                  onClick={() => setActiveTab('verify')}
-                  className={`w-full text-left px-4 py-2 rounded-md ${activeTab === 'verify' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                >
-                  Xác minh danh tính
-                </button>
-                <button
-                  onClick={() => setActiveTab('password')}
-                  className={`w-full text-left px-4 py-2 rounded-md ${activeTab === 'password' ? 'bg-gray-700 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
-                >
-                  Đổi mật khẩu
-                </button>
-                <button
-                  onClick={logout}
-                  className="w-full text-left px-4 py-2 rounded-md text-red-400 hover:bg-gray-700"
-                >
-                  Đăng xuất
-                </button>
-              </nav>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-green-100 text-green-800 text-xs">
+                {user?.username || 'User'}
+              </Badge>
             </div>
           </div>
 
-          {/* Main Content */}
-          <div className="flex-1">
-            {/* Mobile Navigation - Only show on mobile */}
-            <div className="md:hidden mb-6">
-              <div className="bg-gray-800 rounded-lg p-4">
-                <div className="flex items-center space-x-3 mb-4">
-                  <div className="bg-blue-600 w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold">
-                    {user?.username?.charAt(0).toUpperCase() || 'U'}
-                  </div>
-                  <div>
-                    <h2 className="font-medium text-sm">{user.username}</h2>
-                    <p className="text-xs text-gray-400">{user.email}</p>
-                  </div>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setActiveTab('overview')}
-                    className={`px-3 py-2 text-sm rounded ${activeTab === 'overview' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  >
+          {/* TabList */}
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 bg-slate-100/80 backdrop-blur-sm border border-slate-200">
+              <TabsTrigger value="overview" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+                <User className="h-4 w-4 mr-2" />
                     Tổng quan
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('account')}
-                    className={`px-3 py-2 text-sm rounded ${activeTab === 'account' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  >
-                    Tài khoản
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('bank')}
-                    className={`px-3 py-2 text-sm rounded ${activeTab === 'bank' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  >
-                    Ngân hàng
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('verify')}
-                    className={`px-3 py-2 text-sm rounded ${activeTab === 'verify' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  >
+              </TabsTrigger>
+              <TabsTrigger value="verification" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+                <CreditCard className="h-4 w-4 mr-2" />
                     Xác minh
-                  </button>
-                  <button
-                    onClick={() => setActiveTab('password')}
-                    className={`px-3 py-2 text-sm rounded ${activeTab === 'password' ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300'}`}
-                  >
+              </TabsTrigger>
+              <TabsTrigger value="bank" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+                <Building2 className="h-4 w-4 mr-2" />
+                Ngân hàng
+              </TabsTrigger>
+              <TabsTrigger value="password" className="text-slate-700 data-[state=active]:bg-white data-[state=active]:text-blue-600 data-[state=active]:shadow-sm">
+                <Lock className="h-4 w-4 mr-2" />
                     Mật khẩu
-                  </button>
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
                 </div>
               </div>
-            </div>
-            {activeTab === 'overview' && (
-              <div className="space-y-6">
-                <h1 className="text-2xl font-bold">Tổng quan tài khoản</h1>
 
-                {/* Thông báo trạng thái cập nhật */}
-                {(!isAccountInfoLocked || !isBankInfoLocked) && (
-                  <div className="bg-yellow-900/20 border border-yellow-800/50 rounded-lg p-4 text-sm text-yellow-200">
-                    <h4 className="font-medium mb-2">⚠️ Hoàn thiện hồ sơ</h4>
-                    <div className="space-y-1">
-                      {!isAccountInfoLocked && (
-                        <p>• <span className="font-medium">Thông tin tài khoản:</span> Chưa cập nhật - <button onClick={() => setActiveTab('account')} className="text-blue-300 hover:underline">Cập nhật ngay</button></p>
-                      )}
-                      {!isBankInfoLocked && (
-                        <p>• <span className="font-medium">Thông tin ngân hàng:</span> Chưa cập nhật - <button onClick={() => setActiveTab('bank')} className="text-blue-300 hover:underline">Cập nhật ngay</button></p>
-                      )}
+      {/* Content */}
+      <div className="flex-1 flex items-center justify-center p-4">
+        <div className="w-full max-w-2xl">
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+            <TabsContent value="overview" className="space-y-6 mt-6">
+              {/* Thông tin cơ bản */}
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <User className="h-4 w-4" />
+                    Thông tin tài khoản
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm">Tên tài khoản:</span>
+                    <span className="font-medium text-sm">{user.username || 'N/A'}</span>
                     </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm">ID:</span>
+                    <span className="font-medium font-mono text-xs">{user._id || user.id || 'N/A'}</span>
                   </div>
-                )}
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm">Ngày đăng ký:</span>
+                    <span className="font-medium text-sm">{formatDate(user.createdAt)}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 text-sm">Trạng thái xác minh:</span>
+                    <Badge className={`${verificationStatus.color} text-white flex items-center gap-1 text-xs`}>
+                      {verificationStatus.icon}
+                      {verificationStatus.label}
+                    </Badge>
+                  </div>
+                </CardContent>
+              </Card>
 
-                {isAccountInfoLocked && isBankInfoLocked && (
-                  <div className="bg-green-900/20 border border-green-800/50 rounded-lg p-4 text-sm text-green-200">
-                    <h4 className="font-medium mb-2">✅ Hồ sơ đã hoàn thiện</h4>
-                    <p>Tất cả thông tin tài khoản và ngân hàng đã được cập nhật đầy đủ.</p>
-                  </div>
-                )}
+              {/* Số dư */}
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Wallet className="h-4 w-4" />
+                    Tài sản quy đổi
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-center">
+                    <div className="text-2xl font-bold text-green-600 mb-1">
+                      {formatCurrency(balance)}
+                    </div>
+                    <p className="text-gray-600 text-xs">Số dư khả dụng</p>
+                    </div>
+                </CardContent>
+              </Card>
+
+              {/* Nút hành động */}
+              <div className="flex gap-3">
+                <Button 
+                  onClick={handleDeposit}
+                  className="flex-1 bg-green-600 hover:bg-green-700 text-sm"
+                >
+                  <ArrowUpRight className="h-4 w-4 mr-1" />
+                  Nạp tiền
+                </Button>
                 
-                <div className="bg-gray-800/50 p-6 rounded-lg">
-                  <h3 className="text-lg font-medium mb-4">Thông tin cá nhân</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-gray-400">Username</p>
-                      <p className="font-medium">{user.username || 'N/A'}</p>
+                <Button 
+                  onClick={handleWithdraw}
+                  variant="outline"
+                  className="flex-1 text-sm"
+                >
+                  <ArrowDownRight className="h-4 w-4 mr-1" />
+                  Rút tiền
+                </Button>
                     </div>
-                    <div>
-                      <p className="text-gray-400">Email</p>
-                      <p>{user.email || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Họ và tên</p>
-                      <p>{user.fullName || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Số điện thoại</p>
-                      <p>{user.phone || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Địa chỉ</p>
-                      <p>{user.address || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Ngày sinh</p>
-                      <p>{user.dateOfBirth ? formatDate(user.dateOfBirth) : 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Giới tính</p>
-                      <p>{user.gender === 'male' ? 'Nam' : user.gender === 'female' ? 'Nữ' : user.gender === 'other' ? 'Khác' : 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Ngày tạo tài khoản</p>
-                      <p>{formatDate(user.createdAt)}</p>
-                    </div>
-                  </div>
-                </div>
 
-                <div className="bg-gray-800/50 p-6 rounded-lg">
-                  <h3 className="text-lg font-medium mb-4">Thông tin ngân hàng</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-gray-400">Tên chủ tài khoản</p>
-                      <p>{user.bank?.accountHolder || user.bankInfo?.accountHolder || 'Chưa cập nhật'}</p>
+              {/* Thông tin bổ sung */}
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Shield className="h-4 w-4" />
+                    Lưu ý bảo mật
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="text-xs text-gray-600 space-y-1">
+                    <p>• Tài khoản chưa xác minh sẽ bị giới hạn một số chức năng</p>
+                    <p>• Vui lòng cập nhật thông tin xác minh để sử dụng đầy đủ tính năng</p>
+                    <p>• Mọi giao dịch đều được ghi nhận và bảo mật</p>
                     </div>
-                    <div>
-                      <p className="text-gray-400">Tên ngân hàng</p>
-                      <p>{user.bank?.name || user.bankInfo?.name || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Loại tài khoản</p>
-                      <p>{user.bank?.bankType || user.bankInfo?.bankType || 'Chưa cập nhật'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-400">Số tài khoản</p>
-                      <p>{user.bank?.accountNumber || user.bankInfo?.accountNumber || 'Chưa cập nhật'}</p>
-                    </div>
-                  </div>
-                </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-                <div className="bg-gray-800/50 p-6 rounded-lg">
-                  <h3 className="text-lg font-medium mb-4">Trạng thái tài khoản</h3>
-                  <div className="space-y-3">
-                    <p>
-                      <span className="text-gray-400">Xác minh danh tính:</span>{' '}
-                      {isVerified ? (
-                        <span className="text-green-400 flex items-center">
-                          <CheckCircle className="w-4 h-4 mr-1" /> Đã xác minh
-                        </span>
-                      ) : (
-                        <span className="text-yellow-400">Chưa xác minh</span>
-                      )}
+            {/* Tab Xác minh */}
+            <TabsContent value="verification" className="space-y-6 mt-6">
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <CreditCard className="h-4 w-4" />
+                    Xác minh danh tính
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-6">
+                  {/* Trạng thái hiện tại */}
+                  <div className="text-center py-4">
+                    <Badge className={`${verificationStatus.color} text-white mb-4`}>
+                      {verificationStatus.icon}
+                      {verificationStatus.label}
+                    </Badge>
+                    <p className="text-slate-600 text-sm">
+                      {verificationStatus.status === 'verified' 
+                        ? 'Tài khoản của bạn đã được xác minh thành công'
+                        : verificationStatus.status === 'pending'
+                        ? 'Yêu cầu xác minh đang được xử lý'
+                        : 'Vui lòng cung cấp thông tin xác minh'
+                      }
                     </p>
-                    <p><span className="text-gray-400">Số dư khả dụng:</span> <span className="font-bold text-green-400">{getBalance(user.balance).toLocaleString()} VNĐ</span></p>
-                    <p><span className="text-gray-400">Trạng thái hoạt động:</span> <span className="text-green-400">Hoạt động</span></p>
-                  </div>
+                </div>
+
+                  {/* Hiển thị ảnh đã upload (nếu có) */}
+                  {(user?.verification?.cccdFront || user?.verification?.cccdBack) && (
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                      <h3 className="text-lg font-semibold text-slate-800 mb-3">Ảnh đã tải lên</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {user.verification.cccdFront && (
+                    <div>
+                            <Label className="text-sm font-medium text-slate-600">Mặt trước</Label>
+                            <img 
+                              src={user.verification.cccdFront} 
+                              alt="CCCD Front" 
+                              className="w-full h-32 object-cover rounded-lg border mt-1"
+                            />
+                    </div>
+                        )}
+                        {user.verification.cccdBack && (
+                    <div>
+                            <Label className="text-sm font-medium text-slate-600">Mặt sau</Label>
+                            <img 
+                              src={user.verification.cccdBack} 
+                              alt="CCCD Back" 
+                              className="w-full h-32 object-cover rounded-lg border mt-1"
+                            />
+                    </div>
+                        )}
                 </div>
               </div>
             )}
 
-            {activeTab === 'account' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-bold">Thông tin tài khoản</h1>
-                </div>
-
-                {!isAccountInfoLocked && (
-                  <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 text-sm text-blue-200">
-                    <h4 className="font-medium mb-2">📝 Cập nhật thông tin tài khoản</h4>
-                    <p>Vui lòng cập nhật thông tin cá nhân của bạn để hoàn thiện hồ sơ. Thông tin này chỉ có thể cập nhật một lần.</p>
+                  {/* Thông báo chờ duyệt nếu đã upload đủ 2 ảnh */}
+                  {(user?.verification?.cccdFront && user?.verification?.cccdBack) && verificationStatus.status !== 'verified' && (
+                    <div className="bg-gradient-to-r from-amber-50 to-yellow-50 p-6 rounded-xl border border-amber-200 text-center">
+                      <div className="text-4xl mb-3">⏳</div>
+                      <h3 className="text-lg font-semibold text-amber-800 mb-2">Đang chờ duyệt</h3>
+                      <p className="text-amber-700 text-sm mb-3">
+                        Yêu cầu xác minh của bạn đã được gửi và đang được admin xem xét.
+                      </p>
+                      <p className="text-amber-600 text-xs">
+                        Thời gian xử lý thường từ 1-3 ngày làm việc.
+                      </p>
                   </div>
                 )}
 
-                {!isAccountInfoLocked ? (
-                  <form onSubmit={handleSubmitAccountInfo} className="space-y-4 max-w-2xl">
+                  {/* Form xác minh (chỉ hiển thị nếu chưa xác minh VÀ chưa upload đủ 2 ảnh) */}
+                  {verificationStatus.status !== 'verified' && 
+                   (!user?.verification?.cccdFront || !user?.verification?.cccdBack) && (
+                    <div className="space-y-4">
+                      {/* Họ tên */}
                     <div>
-                      <label htmlFor="fullName" className="block text-gray-400 mb-1">Họ và tên *</label>
-                      <input
-                        id="fullName"
-                        name="fullName"
+                        <Label className="text-slate-700 text-sm font-medium">Họ tên đầy đủ</Label>
+                        <Input
                         type="text"
-                        value={accountForm.fullName}
-                        onChange={handleAccountInfoChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required 
+                          value={fullName}
+                          onChange={(e) => setFullName(e.target.value)}
+                          placeholder="Nhập họ tên như trên CCCD"
+                          className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
+
+                      {/* Upload ảnh */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Mặt trước */}
                     <div>
-                      <label htmlFor="phone" className="block text-gray-400 mb-1">Số điện thoại *</label>
+                          <Label className="text-slate-700 text-sm font-medium">Mặt trước CCCD</Label>
+                          <div className="mt-1">
                       <input
-                        id="phone"
-                        name="phone"
-                        type="tel"
-                        value={accountForm.phone}
-                        onChange={handleAccountInfoChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="address" className="block text-gray-400 mb-1">Địa chỉ</label>
-                      <input
-                        id="address"
-                        name="address"
-                        type="text"
-                        value={accountForm.address}
-                        onChange={handleAccountInfoChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="dateOfBirth" className="block text-gray-400 mb-1">Ngày sinh</label>
-                      <input
-                        id="dateOfBirth"
-                        name="dateOfBirth"
-                        type="date"
-                        value={accountForm.dateOfBirth}
-                        onChange={handleAccountInfoChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="gender" className="block text-gray-400 mb-1">Giới tính</label>
-                      <select
-                        id="gender"
-                        name="gender"
-                        value={accountForm.gender}
-                        onChange={handleAccountInfoChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                      >
-                        <option value="">Chọn giới tính</option>
-                        <option value="male">Nam</option>
-                        <option value="female">Nữ</option>
-                        <option value="other">Khác</option>
-                      </select>
-                    </div>
-                    <div className="flex space-x-3 pt-2">
-                      <Button type="submit" disabled={isSaving}>
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Đang lưu...
-                          </>
-                        ) : 'Lưu thông tin'}
+                              type="file"
+                              ref={frontInputRef}
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileSelect(file, 'front');
+                              }}
+                              className="hidden"
+                            />
+                            <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
+                              {frontPreview ? (
+                                <div className="space-y-2">
+                                  <img 
+                                    src={frontPreview} 
+                                    alt="Front Preview" 
+                                    className="w-full h-24 object-cover rounded"
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      setFrontImage(null);
+                                      setFrontPreview('');
+                                      if (frontInputRef.current) frontInputRef.current.value = '';
+                                    }}
+                                  >
+                                    Xóa
                       </Button>
                     </div>
-                    <div className="text-sm text-yellow-400 bg-yellow-900/20 p-3 rounded">
-                      ⚠️ Lưu ý: Thông tin này chỉ có thể cập nhật một lần và không thể chỉnh sửa sau này.
-                    </div>
-                  </form>
-                ) : (
-                  <div className="bg-gray-800/50 p-6 rounded-lg max-w-2xl">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-gray-400 text-sm">Họ và tên</p>
-                        <p className="font-medium">{user?.fullName || 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Số điện thoại</p>
-                        <p className="font-medium">{user?.phone || 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Địa chỉ</p>
-                        <p className="font-medium">{user?.address || 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Ngày sinh</p>
-                        <p className="font-medium">{user?.dateOfBirth ? formatDate(user.dateOfBirth) : 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Giới tính</p>
-                        <p className="font-medium">
-                          {user?.gender === 'male' ? 'Nam' : 
-                           user?.gender === 'female' ? 'Nữ' : 
-                           user?.gender === 'other' ? 'Khác' : 
-                           'Chưa cập nhật'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Ngày cập nhật</p>
-                        <p className="font-medium">{user?.updatedAt ? formatDate(user.updatedAt) : 'Chưa cập nhật'}</p>
-                      </div>
-                    </div>
-                    <div className="mt-4 text-sm text-gray-400 bg-gray-700/50 p-3 rounded">
-                      ℹ️ Thông tin đã được cập nhật và không thể chỉnh sửa.
-                    </div>
+                              ) : (
+                                <div 
+                                  className="cursor-pointer"
+                                  onClick={() => frontInputRef.current?.click()}
+                                >
+                                  <Camera className="h-8 w-8 mx-auto text-slate-400 mb-2" />
+                                  <p className="text-sm text-slate-600">Click để chọn ảnh</p>
+                                  <p className="text-xs text-slate-500">JPG, PNG (tối đa 5MB)</p>
                   </div>
                 )}
               </div>
-            )}
-
-            {activeTab === 'bank' && (
-              <div className="space-y-6">
-                <div className="flex justify-between items-center">
-                  <h1 className="text-2xl font-bold">Thông tin ngân hàng</h1>
                 </div>
-
-                {!isBankInfoLocked && (
-                  <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 text-sm text-blue-200">
-                    <h4 className="font-medium mb-2">🏦 Cập nhật thông tin ngân hàng</h4>
-                    <p>Vui lòng cập nhật thông tin ngân hàng của bạn để có thể thực hiện các giao dịch nạp/rút tiền. Thông tin này chỉ có thể cập nhật một lần.</p>
                   </div>
-                )}
 
-                {!isBankInfoLocked ? (
-                  <form onSubmit={handleSubmitBankInfo} className="space-y-4 max-w-2xl">
+                        {/* Mặt sau */}
                     <div>
-                      <label htmlFor="fullName" className="block text-gray-400 mb-1">Tên chủ tài khoản</label>
+                          <Label className="text-slate-700 text-sm font-medium">Mặt sau CCCD</Label>
+                          <div className="mt-1">
                       <input
-                        id="fullName"
-                        name="accountHolder"
-                        type="text"
-                        value={bankForm.accountHolder}
-                        onChange={handleBankFormChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="bankType" className="block text-gray-400 mb-1">Loại tài khoản</label>
-                      <select
-                        id="bankType"
-                        name="bankType"
-                        value={bankForm.bankType}
-                        onChange={handleBankFormChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required
-                      >
-                        <option value="">Chọn loại tài khoản</option>
-                        <option value="Ngân hàng">Ngân hàng</option>
-                        <option value="Ví điện tử">Ví điện tử</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label htmlFor="bankName" className="block text-gray-400 mb-1">Tên ngân hàng/Ví điện tử</label>
-                      <input
-                        id="bankName"
-                        name="bankName"
-                        type="text"
-                        value={bankForm.bankName}
-                        onChange={handleBankFormChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required 
-                      />
-                    </div>
-                    <div>
-                      <label htmlFor="accountNumber" className="block text-gray-400 mb-1">Số tài khoản/Số điện thoại</label>
-                      <input
-                        id="accountNumber"
-                        name="accountNumber"
-                        type="text"
-                        value={bankForm.accountNumber}
-                        onChange={handleBankFormChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required 
-                      />
-                    </div>
-                    <div className="flex space-x-3 pt-2">
-                      <Button type="submit" disabled={isSaving}>
-                        {isSaving ? (
-                          <>
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            Đang lưu...
-                          </>
-                        ) : 'Lưu thay đổi'}
-                      </Button>
+                              type="file"
+                              ref={backInputRef}
+                              accept="image/*"
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleFileSelect(file, 'back');
+                              }}
+                              className="hidden"
+                            />
+                            <div className="border-2 border-dashed border-slate-300 rounded-lg p-4 text-center hover:border-blue-400 transition-colors">
+                              {backPreview ? (
+                                <div className="space-y-2">
+                                  <img 
+                                    src={backPreview} 
+                                    alt="Back Preview" 
+                                    className="w-full h-24 object-cover rounded"
+                                  />
                       <Button
-                        type="button"
+                                    size="sm"
                         variant="outline"
-                        className="border-gray-600 text-white hover:bg-gray-700"
-                        onClick={() => setIsEditingBankInfo(false)}
-                      >
-                        Hủy
+                                    onClick={() => {
+                                      setBackImage(null);
+                                      setBackPreview('');
+                                      if (backInputRef.current) backInputRef.current.value = '';
+                                    }}
+                                  >
+                                    Xóa
                       </Button>
                     </div>
-                    <div className="text-sm text-yellow-400 bg-yellow-900/20 p-3 rounded">
-                      ⚠️ Lưu ý: Thông tin ngân hàng chỉ có thể cập nhật một lần và không thể chỉnh sửa sau này.
+                              ) : (
+                                <div 
+                                  className="cursor-pointer"
+                                  onClick={() => backInputRef.current?.click()}
+                                >
+                                  <Camera className="h-8 w-8 mx-auto text-slate-400 mb-2" />
+                                  <p className="text-sm text-slate-600">Click để chọn ảnh</p>
+                                  <p className="text-xs text-slate-500">JPG, PNG (tối đa 5MB)</p>
+                      </div>
+                              )}
+                      </div>
+                      </div>
+                      </div>
+                      </div>
+
+                      {/* Nút gửi */}
+                      <Button
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
+                        onClick={handleSubmitVerification}
+                        disabled={!fullName.trim() || !frontImage || !backImage || isUploading}
+                      >
+                        {isUploading ? (
+                          <>
+                            <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                            Đang xử lý...
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="h-5 w-5 mr-2" />
+                            Gửi yêu cầu xác minh
+                          </>
+                        )}
+                      </Button>
+                      </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab Ngân hàng */}
+            <TabsContent value="bank" className="space-y-6 mt-6">
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Building2 className="h-4 w-4" />
+                    Thông tin ngân hàng
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {hasBankInfo ? (
+                    // Hiển thị thông tin đã có (chỉ đọc)
+                    <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200">
+                      <h3 className="text-lg font-semibold text-slate-800 mb-3">Thông tin đã liên kết</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-sm font-medium">Tên chủ tài khoản:</span>
+                          <span className="font-semibold text-sm text-slate-800">{user?.bank?.accountHolder}</span>
                     </div>
-                  </form>
-                ) : (
-                  <div className="bg-gray-800/50 p-6 rounded-lg max-w-2xl">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-gray-400 text-sm">Tên chủ tài khoản</p>
-                        <p className="font-medium">{bankForm.accountHolder || 'Chưa cập nhật'}</p>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-sm font-medium">Tên ngân hàng:</span>
+                          <span className="font-semibold text-sm text-slate-800">{user?.bank?.name}</span>
                       </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Loại tài khoản</p>
-                        <p className="font-medium">{bankForm.bankType || 'Chưa cập nhật'}</p>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-sm font-medium">Số tài khoản:</span>
+                          <span className="font-mono text-sm font-bold text-slate-800">{user?.bank?.accountNumber}</span>
+                  </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-sm font-medium">Loại:</span>
+                          <span className="font-semibold text-sm text-slate-800">Ngân hàng</span>
+              </div>
                       </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Tên ngân hàng/Ví điện tử</p>
-                        <p className="font-medium">{bankForm.bankName || 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Số tài khoản/SĐT</p>
-                        <p className="font-medium">{bankForm.accountNumber || 'Chưa cập nhật'}</p>
-                      </div>
-                      <div>
-                        <p className="text-gray-400 text-sm">Trạng thái xác minh</p>
-                        <p className="font-medium">
-                          {bankForm.verified ? (
-                            <span className="text-green-400">Đã xác minh</span>
-                          ) : (
-                            <span className="text-yellow-400">Chưa xác minh</span>
-                          )}
+                      <div className="mt-4 p-3 bg-blue-100 rounded-lg">
+                        <p className="text-blue-800 text-xs">
+                          ℹ️ Thông tin ngân hàng đã được liên kết và không thể chỉnh sửa.
                         </p>
                       </div>
                     </div>
-                    {isBankInfoLocked && (
-                      <div className="mt-4 text-sm text-gray-400 bg-gray-700/50 p-3 rounded">
-                        ℹ️ Thông tin ngân hàng đã được cập nhật và không thể chỉnh sửa.
+                  ) : (
+                    // Form nhập thông tin ngân hàng
+                    <div className="space-y-4">
+                      <div className="text-center py-4">
+                        <div className="text-4xl mb-3">🏦</div>
+                        <h3 className="text-lg font-semibold text-slate-800 mb-2">Liên kết tài khoản ngân hàng</h3>
+                        <p className="text-slate-600 text-sm mb-4">
+                          Cung cấp thông tin ngân hàng để có thể rút tiền
+                        </p>
                       </div>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-  
-            {activeTab === 'verify' && (
-              <div className="space-y-6">
+
+                      <div className="space-y-4">
+                        {/* Tên chủ tài khoản */}
                 <div>
-                  <h1 className="text-2xl font-bold mb-2">Xác minh danh tính</h1>
-                  <p className="text-gray-400">Vui lòng tải lên ảnh chụp 2 mặt CMND/CCCD của bạn</p>
+                          <Label className="text-slate-700 text-sm font-medium">Tên chủ tài khoản *</Label>
+                          <Input
+                            type="text"
+                            value={bankForm.accountHolder}
+                            onChange={(e) => setBankForm({...bankForm, accountHolder: e.target.value})}
+                            placeholder="Nhập tên chủ tài khoản như trên thẻ"
+                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                          />
                 </div>
 
-                {/* Hiển thị trạng thái xác minh */}
-                {verificationStatus.status && (
-                  <div className={`p-4 rounded-lg border ${
-                    verificationStatus.status === 'approved' 
-                      ? 'bg-green-900/20 border-green-800/50 text-green-200'
-                      : verificationStatus.status === 'rejected'
-                      ? 'bg-red-900/20 border-red-800/50 text-red-200'
-                      : 'bg-yellow-900/20 border-yellow-800/50 text-yellow-200'
-                  }`}>
-                    <h4 className="font-medium mb-2">
-                      {verificationStatus.status === 'approved' && '✅ Xác minh thành công'}
-                      {verificationStatus.status === 'rejected' && '❌ Xác minh bị từ chối'}
-                      {verificationStatus.status === 'pending' && '⏳ Đang chờ xét duyệt'}
-                    </h4>
-                    {verificationStatus.status === 'pending' && (
-                      <p className="text-sm">Yêu cầu xác minh của bạn đã được gửi và đang chờ admin xét duyệt. Thời gian xử lý thường từ 1-3 ngày làm việc.</p>
-                    )}
-                    {verificationStatus.status === 'rejected' && verificationStatus.rejectionReason && (
-                      <p className="text-sm">Lý do từ chối: {verificationStatus.rejectionReason}</p>
-                    )}
-                    {verificationStatus.submittedAt && (
-                      <p className="text-sm mt-2">Ngày gửi: {formatDate(verificationStatus.submittedAt)}</p>
-                    )}
-                    {verificationStatus.reviewedAt && (
-                      <p className="text-sm">Ngày xét duyệt: {formatDate(verificationStatus.reviewedAt)}</p>
-                    )}
+                        {/* Tên ngân hàng */}
+                        <div>
+                          <Label className="text-slate-700 text-sm font-medium">Tên ngân hàng *</Label>
+                          <Input
+                            type="text"
+                            value={bankForm.bankName}
+                            onChange={(e) => setBankForm({...bankForm, bankName: e.target.value})}
+                            placeholder="VD: Vietcombank, BIDV, Agribank..."
+                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                          />
                   </div>
-                )}
 
-                {/* Hiển thị thông báo khi đã tải đầy đủ ảnh nhưng chưa submit */}
-                {verificationStatus.cccdFront && verificationStatus.cccdBack && !verificationStatus.status && (
-                  <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 text-sm text-blue-200">
-                    <h4 className="font-medium mb-2">📋 Đã tải đầy đủ ảnh</h4>
-                    <p>Bạn đã tải lên đầy đủ ảnh CMND/CCCD. Vui lòng chờ admin xét duyệt hoặc liên hệ hỗ trợ nếu cần thiết.</p>
+                        {/* Số tài khoản */}
+                        <div>
+                          <Label className="text-slate-700 text-sm font-medium">Số tài khoản *</Label>
+                          <Input
+                            type="text"
+                            value={bankForm.accountNumber}
+                            onChange={(e) => setBankForm({...bankForm, accountNumber: e.target.value})}
+                            placeholder="Nhập số tài khoản ngân hàng"
+                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                          />
                   </div>
-                )}
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Front ID Card */}
-                  <div className="bg-gray-800/50 rounded-lg p-6">
-                    <h3 className="font-medium mb-4">Mặt trước CMND/CCCD</h3>
-                    {verificationStatus.cccdFront ? (
-                      <div className="relative">
-                        <img 
-                          src={verificationStatus.cccdFront} 
-                          alt="Mặt trước CMND/CCCD"
-                          className="w-full h-auto rounded border border-gray-700"
-                        />
-                        {uploadStatus.front && (
-                          <div className={`mt-2 text-sm ${uploadStatus.front.success ? 'text-green-400' : 'text-red-400'}`}>
-                            {uploadStatus.front.success ? (
-                              <span className="flex items-center">
-                                <CheckCircle className="w-4 h-4 mr-1" />
-                                {uploadStatus.front.message}
-                              </span>
-                            ) : (
-                              <span className="flex items-center">
-                                <XCircle className="w-4 h-4 mr-1" />
-                                {uploadStatus.front.message}
-                              </span>
-                            )}
+                        {/* Loại */}
+                        <div>
+                          <Label className="text-slate-700 text-sm font-medium">Loại</Label>
+                          <Input
+                            type="text"
+                            value="Ngân hàng"
+                            disabled
+                            className="mt-1 border-slate-300 bg-slate-100 text-slate-500"
+                          />
                           </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center">
-                        <input
-                          type="file"
-                          id="frontId"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleFileChange(e, 'front')}
-                        />
-                        <label
-                          htmlFor="frontId"
-                          className="flex flex-col items-center justify-center cursor-pointer p-6"
-                        >
-                          <UploadCloud className="w-12 h-12 text-gray-500 mb-2" />
-                          <p className="text-gray-400">Tải lên mặt trước CMND/CCCD</p>
-                          <p className="text-xs text-gray-500 mt-1">JPG, PNG (tối đa 5MB)</p>
-                        </label>
-                        {frontIdFile && (
+
+                        {/* Nút lưu */}
                           <Button
-                            onClick={() => handleUpload('front')}
-                            disabled={isUploading}
-                            className="mt-4 w-full"
-                          >
-                            {isUploading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Đang tải lên...
-                              </>
-                            ) : 'Xác nhận tải lên'}
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Back ID Card */}
-                  <div className="bg-gray-800/50 rounded-lg p-6">
-                    <h3 className="font-medium mb-4">Mặt sau CMND/CCCD</h3>
-                    {verificationStatus.cccdBack ? (
-                      <div className="relative">
-                        <img 
-                          src={verificationStatus.cccdBack} 
-                          alt="Mặt sau CMND/CCCD"
-                          className="w-full h-auto rounded border border-gray-700"
-                        />
-                        {uploadStatus.back && (
-                          <div className={`mt-2 text-sm ${uploadStatus.back.success ? 'text-green-400' : 'text-red-400'}`}>
-                            {uploadStatus.back.success ? (
-                              <span className="flex items-center">
-                                <CheckCircle className="w-4 h-4 mr-1" />
-                                {uploadStatus.back.message}
-                              </span>
-                            ) : (
-                              <span className="flex items-center">
-                                <XCircle className="w-4 h-4 mr-1" />
-                                {uploadStatus.back.message}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="border-2 border-dashed border-gray-700 rounded-lg p-6 text-center">
-                        <input
-                          type="file"
-                          id="backId"
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => handleFileChange(e, 'back')}
-                        />
-                        <label
-                          htmlFor="backId"
-                          className="flex flex-col items-center justify-center cursor-pointer p-6"
+                          className="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:bg-slate-400 disabled:cursor-not-allowed"
+                          onClick={handleSubmitBank}
+                          disabled={isSavingBank || !bankForm.accountHolder.trim() || !bankForm.bankName.trim() || !bankForm.accountNumber.trim()}
                         >
-                          <UploadCloud className="w-12 h-12 text-gray-500 mb-2" />
-                          <p className="text-gray-400">Tải lên mặt sau CMND/CCCD</p>
-                          <p className="text-xs text-gray-500 mt-1">JPG, PNG (tối đa 5MB)</p>
-                        </label>
-                        {backIdFile && (
-                          <Button
-                            onClick={() => handleUpload('back')}
-                            disabled={isUploading}
-                            className="mt-4 w-full"
-                          >
-                            {isUploading ? (
-                              <>
-                                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                Đang tải lên...
-                              </>
-                            ) : 'Xác nhận tải lên'}
-                          </Button>
-                        )}
+                          {isSavingBank ? (
+                            <>
+                              <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                              Đang lưu...
+                            </>
+                          ) : (
+                            <>
+                              <Building2 className="h-5 w-5 mr-2" />
+                              Lưu thông tin ngân hàng
+                            </>
+                          )}
+                        </Button>
                       </div>
-                    )}
                   </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            {/* Tab Mật khẩu */}
+            <TabsContent value="password" className="space-y-6 mt-6">
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Lock className="h-4 w-4" />
+                    Đổi mật khẩu
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="text-center py-4">
+                    <div className="text-4xl mb-3">🔒</div>
+                    <h3 className="text-lg font-semibold text-slate-800 mb-2">Bảo mật tài khoản</h3>
+                    <p className="text-slate-600 text-sm mb-6">
+                      Thay đổi mật khẩu để bảo vệ tài khoản của bạn
+                    </p>
                 </div>
 
-                <div className="mt-8 bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 text-sm text-blue-200">
-                  <h4 className="font-medium mb-2">Hướng dẫn tải ảnh:</h4>
-                  <ul className="space-y-1 text-xs">
-                    <li>• Ảnh phải rõ nét, không bị mờ, không bị che khuất</li>
-                    <li>• Chụp đầy đủ 4 góc CMND/CCCD</li>
-                    <li>• Đảm bảo thông tin trên CMND/CCCD dễ đọc</li>
-                    <li>• Kích thước tối đa: 5MB/ảnh</li>
-                  </ul>
-                </div>
-
-                <div className="p-4 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
-                  <h4 className="font-medium text-yellow-300 mb-2">Lưu ý quan trọng:</h4>
-                  <ul className="text-sm text-yellow-200 space-y-1">
-                    <li>• Thông tin của bạn sẽ được bảo mật và chỉ sử dụng cho mục đích xác minh danh tính</li>
-                    <li>• Thời gian xử lý: Thông thường từ 1-3 ngày làm việc</li>
-                    <li>• Vui lòng đảm bảo thông tin trên CMND/CCCD rõ ràng và dễ đọc</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'password' && (
-              <div className="space-y-6">
-                <h1 className="text-2xl font-bold">Đổi mật khẩu</h1>
-                
-                <div className="bg-gray-800/50 p-6 rounded-lg max-w-2xl">
-                  <form onSubmit={handleSubmitPassword} className="space-y-4">
+                  <div className="space-y-4">
+                    {/* Mật khẩu hiện tại */}
                     <div>
-                      <label htmlFor="currentPassword" className="block text-gray-400 mb-1">Mật khẩu hiện tại</label>
-                      <input
-                        id="currentPassword"
-                        name="currentPassword"
+                      <Label className="text-slate-700 text-sm font-medium">Mật khẩu hiện tại *</Label>
+                      <Input
                         type="password"
                         value={passwordForm.currentPassword}
-                        onChange={handlePasswordChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required
+                        onChange={(e) => setPasswordForm({...passwordForm, currentPassword: e.target.value})}
+                        placeholder="Nhập mật khẩu hiện tại"
+                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                       />
                     </div>
+
+                    {/* Mật khẩu mới */}
                     <div>
-                      <label htmlFor="newPassword" className="block text-gray-400 mb-1">Mật khẩu mới</label>
-                      <input
-                        id="newPassword"
-                        name="newPassword"
+                      <Label className="text-slate-700 text-sm font-medium">Mật khẩu mới *</Label>
+                      <Input
                         type="password"
                         value={passwordForm.newPassword}
-                        onChange={handlePasswordChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required
-                        minLength={8}
+                        onChange={(e) => setPasswordForm({...passwordForm, newPassword: e.target.value})}
+                        placeholder="Nhập mật khẩu mới"
+                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                       />
-                      <div className="mt-1 text-xs text-gray-500">
-                        Mật khẩu phải có ít nhất 8 ký tự, bao gồm chữ cái và số
                       </div>
-                      {passwordError && <p className="mt-1 text-sm text-red-400">{passwordError}</p>}
-                    </div>
+
+                    {/* Xác nhận mật khẩu mới */}
                     <div>
-                      <label htmlFor="confirmPassword" className="block text-gray-400 mb-1">Xác nhận mật khẩu mới</label>
-                      <input
-                        id="confirmPassword"
-                        name="confirmPassword"
+                      <Label className="text-slate-700 text-sm font-medium">Xác nhận mật khẩu mới *</Label>
+                      <Input
                         type="password"
                         value={passwordForm.confirmPassword}
-                        onChange={handlePasswordChange}
-                        className="w-full bg-gray-800 border border-gray-700 rounded p-2 text-white"
-                        required
-                        minLength={8}
+                        onChange={(e) => setPasswordForm({...passwordForm, confirmPassword: e.target.value})}
+                        placeholder="Nhập lại mật khẩu mới"
+                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
                       />
-                      {passwordForm.newPassword && passwordForm.confirmPassword && passwordForm.newPassword !== passwordForm.confirmPassword && (
-                        <p className="mt-1 text-sm text-red-400">Mật khẩu xác nhận không khớp</p>
-                      )}
                     </div>
-                    <Button type="submit" className="mt-4 bg-blue-600 hover:bg-blue-700" disabled={isSaving}>
-                      {isSaving ? (
+
+                    {/* Nút đổi mật khẩu */}
+                    <Button 
+                      className="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 shadow-lg hover:shadow-xl disabled:bg-slate-400 disabled:cursor-not-allowed"
+                      onClick={handleChangePassword}
+                      disabled={isChangingPassword || !passwordForm.currentPassword.trim() || !passwordForm.newPassword.trim() || !passwordForm.confirmPassword.trim()}
+                    >
+                      {isChangingPassword ? (
                         <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Đang xử lý...
+                          <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                          Đang đổi mật khẩu...
                         </>
                       ) : (
-                        'Cập nhật mật khẩu'
+                        <>
+                          <Lock className="h-5 w-5 mr-2" />
+                          Đổi mật khẩu
+                        </>
                       )}
                     </Button>
-                  </form>
-
-                  <div className="mt-6 p-4 bg-yellow-900/20 border border-yellow-800/50 rounded-lg">
-                    <h4 className="font-medium text-yellow-300 mb-2">Lưu ý bảo mật:</h4>
-                    <ul className="text-sm text-yellow-200 space-y-1">
-                      <li>• Mật khẩu phải có ít nhất 8 ký tự</li>
-                      <li>• Bao gồm cả chữ cái và số</li>
-                      <li>• Không được trùng với mật khẩu cũ</li>
-                      <li>• Sau khi đổi mật khẩu, bạn sẽ cần đăng nhập lại</li>
-                    </ul>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </div>
   );
-};
+}

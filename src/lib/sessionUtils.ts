@@ -86,7 +86,7 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
       for (const trade of trades) {
         // 4. Xác định win/lose
         const isWin = trade.direction === result;
-        const profit = isWin ? Math.floor(trade.amount * 0.95) : 0; // Thắng được 95%
+        const profit = isWin ? Math.floor(trade.amount * 0.90) : 0; // Thắng được 90%
         const newStatus = 'completed';
 
         // 5. Cập nhật lệnh

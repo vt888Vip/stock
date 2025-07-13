@@ -22,6 +22,8 @@ export default function Header() {
   const { user, logout } = useAuth()
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false)
   const [scrolled, setScrolled] = useState(false)
+  const [isWalletDropdownOpen, setIsWalletDropdownOpen] = useState(false)
+  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false)
 
   // Handle scrolling effect
   useEffect(() => {
@@ -47,6 +49,8 @@ export default function Header() {
   // Close mobile menu when route changes
   useEffect(() => {
     setIsMobileMenuOpen(false)
+    setIsWalletDropdownOpen(false)
+    setIsUserDropdownOpen(false)
   }, [pathname])
 
   return (
@@ -68,33 +72,36 @@ export default function Header() {
           
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
-              onClick={() => router.push("/")}
-            >
-              Trang chủ
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
-              onClick={() => router.push("/trade")}
-            >
-              Giao dịch
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
-              onClick={() => router.push("/")}
-            >
-              Tin tức
-            </Button>
+            <Link href="/">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
+              >
+                Trang chủ
+              </Button>
+            </Link>
+            <Link href="/trade">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
+              >
+                Giao dịch
+              </Button>
+            </Link>
+            <Link href="/">
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50"
+              >
+                Tin tức
+              </Button>
+            </Link>
             
             {/* Wallet dropdown for all users */}
-            <DropdownMenu>
+            <DropdownMenu open={isWalletDropdownOpen} onOpenChange={setIsWalletDropdownOpen}>
               <DropdownMenuTrigger asChild>
                 <Button 
                   variant="outline" 
@@ -109,28 +116,38 @@ export default function Header() {
               <DropdownMenuContent align="start" className="w-56">
                 {user ? (
                   <>
-                    <DropdownMenuItem onClick={() => router.push("/deposit")}>
-                      <ArrowDownLeft className="mr-2 h-4 w-4" />
-                      <span>Nạp tiền</span>
+                    <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
+                      <Link href="/deposit" className="flex items-center w-full">
+                        <ArrowDownLeft className="mr-2 h-4 w-4" />
+                        <span>Nạp tiền</span>
+                      </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push("/withdraw")}>
-                      <ArrowUpRight className="mr-2 h-4 w-4" />
-                      <span>Rút tiền</span>
+                    <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
+                      <Link href="/withdraw" className="flex items-center w-full">
+                        <ArrowUpRight className="mr-2 h-4 w-4" />
+                        <span>Rút tiền</span>
+                      </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push("/transaction-history")}>
-                      <Clock className="mr-2 h-4 w-4" />
-                      <span>Lịch sử giao dịch</span>
+                    <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
+                      <Link href="/transaction-history" className="flex items-center w-full">
+                        <Clock className="mr-2 h-4 w-4" />
+                        <span>Lịch sử giao dịch</span>
+                      </Link>
                     </DropdownMenuItem>
                   </>
                 ) : (
                   <>
-                    <DropdownMenuItem onClick={() => router.push("/login")}>
-                      <ArrowDownLeft className="mr-2 h-4 w-4" />
-                      <span>Đăng nhập để nạp tiền</span>
+                    <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
+                      <Link href="/login" className="flex items-center w-full">
+                        <ArrowDownLeft className="mr-2 h-4 w-4" />
+                        <span>Đăng nhập để nạp tiền</span>
+                      </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => router.push("/register")}>
-                      <ArrowUpRight className="mr-2 h-4 w-4" />
-                      <span>Đăng ký tài khoản</span>
+                    <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
+                      <Link href="/register" className="flex items-center w-full">
+                        <ArrowUpRight className="mr-2 h-4 w-4" />
+                        <span>Đăng ký tài khoản</span>
+                      </Link>
                     </DropdownMenuItem>
                   </>
                 )}
@@ -146,7 +163,7 @@ export default function Header() {
             variant="ghost" 
             size="sm" 
             className="hidden sm:flex text-blue-600 hover:bg-blue-50"
-            onClick={() => router.push("/support")}
+            onClick={() => window.open("https://t.me/londonhsc", "_blank")}
           >
             CSKH
           </Button>
@@ -162,7 +179,7 @@ export default function Header() {
           </Button>
           
           {/* User Account dropdown */}
-          <DropdownMenu>
+          <DropdownMenu open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>
             <DropdownMenuTrigger asChild>
               {user ? (
                 <Button variant="ghost" size="icon" className="rounded-full overflow-hidden h-8 w-8">
@@ -188,31 +205,44 @@ export default function Header() {
                   {/* Username display */}
                   <div className="px-4 py-2 text-sm font-medium">{user.username || 'tdnm'}</div>
                   
-                  <DropdownMenuItem onClick={() => router.push("/account")}>
-                    <span>Tổng quan tài khoản</span>
+                  <DropdownMenuItem onClick={() => setIsUserDropdownOpen(false)}>
+                    <Link href="/account" className="flex items-center w-full">
+                      <span>Tổng quan tài khoản</span>
+                    </Link>
                   </DropdownMenuItem>
                   
-                  <DropdownMenuItem onClick={() => router.push("/account?tab=password")}>
-                    <span>Cài đặt bảo mật</span>
+                  <DropdownMenuItem onClick={() => setIsUserDropdownOpen(false)}>
+                    <Link href="/account?tab=password" className="flex items-center w-full">
+                      <span>Cài đặt bảo mật</span>
+                    </Link>
                   </DropdownMenuItem>
                   
-                  <DropdownMenuItem onClick={() => router.push("/account?tab=verify")}>
-                    <span>Xác minh danh tính</span>
+                  <DropdownMenuItem onClick={() => setIsUserDropdownOpen(false)}>
+                    <Link href="/account?tab=verification" className="flex items-center w-full">
+                      <span>Xác minh danh tính</span>
+                    </Link>
                   </DropdownMenuItem>
                   
                   <DropdownMenuSeparator />
                   
-                  <DropdownMenuItem onClick={handleLogout}>
+                  <DropdownMenuItem onClick={() => {
+                    setIsUserDropdownOpen(false)
+                    handleLogout()
+                  }}>
                     <span>Đăng xuất</span>
                   </DropdownMenuItem>
                 </>
               ) : (
                 <>
-                  <DropdownMenuItem onClick={() => router.push("/login")}>
-                    <span>Đăng nhập</span>
+                  <DropdownMenuItem onClick={() => setIsUserDropdownOpen(false)}>
+                    <Link href="/login" className="flex items-center w-full">
+                      <span>Đăng nhập</span>
+                    </Link>
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => router.push("/register")}>
-                    <span>Mở tài khoản</span>
+                  <DropdownMenuItem onClick={() => setIsUserDropdownOpen(false)}>
+                    <Link href="/register" className="flex items-center w-full">
+                      <span>Mở tài khoản</span>
+                    </Link>
                   </DropdownMenuItem>
                 </>
               )}
@@ -246,38 +276,73 @@ export default function Header() {
           
           <div className="flex-1 overflow-auto">
             <nav className="flex flex-col w-full">
-              <Link href="/" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Trang chủ
               </Link>
-              <Link href="/trade" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/trade" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Giao dịch
               </Link>
-              <Link href="/transaction-history" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/transaction-history" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Lịch sử giao dịch
               </Link>
-              <Link href="/account" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/account" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Tổng quan tài khoản
               </Link>
-              <Link href="/account?tab=verify" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/account?tab=password" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Đổi mật khẩu
               </Link>
-              <Link href="/account?tab=verify" className="py-4 px-5 border-b border-gray-200 text-base">
+              <Link 
+                href="/account?tab=verification" 
+                className="py-4 px-5 border-b border-gray-200 text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Xác minh danh tính
               </Link>
             </nav>
             
             <div className="grid grid-cols-2 gap-4 p-5 mt-4">
-              <Link href="/deposit" className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base">
+              <Link 
+                href="/deposit" 
+                className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Nạp tiền
               </Link>
-              <Link href="/withdraw" className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base">
+              <Link 
+                href="/withdraw" 
+                className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                onClick={() => setIsMobileMenuOpen(false)}
+              >
                 Rút tiền
               </Link>
             </div>
             
             <div className="px-5 pb-6">
               <button 
-                onClick={handleLogout}
+                onClick={() => {
+                  setIsMobileMenuOpen(false)
+                  handleLogout()
+                }}
                 className="w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-md flex justify-center items-center font-medium text-base"
               >
                 Đăng xuất

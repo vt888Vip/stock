@@ -28,11 +28,13 @@ import {
   Building,
   Trash2,
   Edit,
-  Target
+  Target,
+  Search,
+  X
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'predictions';
+type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'predictions' | 'orders';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -52,6 +54,7 @@ export default function AdminDashboard() {
   const [transactions, setTransactions] = useState([]);
   const [deposits, setDeposits] = useState([]);
   const [banks, setBanks] = useState([]);
+  const [orders, setOrders] = useState<any[]>([]);
   
   // Form states
   const [selectedUser, setSelectedUser] = useState<any>(null);
@@ -75,6 +78,12 @@ export default function AdminDashboard() {
   const [showBankModal, setShowBankModal] = useState(false);
   const [showBankDeleteConfirm, setShowBankDeleteConfirm] = useState(false);
   const [bankToDelete, setBankToDelete] = useState<any>(null);
+
+  // Search states
+  const [searchName, setSearchName] = useState('');
+  const [searchDateFrom, setSearchDateFrom] = useState('');
+  // 1. Thêm state cho searchOrderDate
+  const [searchOrderDate, setSearchOrderDate] = useState('');
 
   // Kiểm tra quyền truy cập
   useEffect(() => {
@@ -177,6 +186,24 @@ export default function AdminDashboard() {
         setBanks(banksData.banks || []);
       }
 
+      // Load orders
+      try {
+        const ordersResponse = await fetch('/api/admin/orders', {
+          credentials: 'include',
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
+          }
+        });
+        if (ordersResponse.ok) {
+          const ordersData = await ordersResponse.json();
+          setOrders(ordersData.orders || []);
+        } else {
+          setOrders([]);
+        }
+      } catch {
+        setOrders([]);
+      }
+
     } catch (error) {
       console.error('Error loading data:', error);
       toast({
@@ -193,6 +220,23 @@ export default function AdminDashboard() {
     await logout();
     router.push('/login');
   };
+
+  // Filter users based on search criteria
+  const filteredUsers = users.filter((user: any) => {
+    const nameMatch = searchName === '' || 
+      user.username?.toLowerCase().includes(searchName.toLowerCase());
+    
+    const dateMatch = () => {
+      if (!searchDateFrom) return true;
+      
+      const userDate = new Date(user.createdAt);
+      const searchDate = new Date(searchDateFrom);
+      
+      return userDate.toDateString() === searchDate.toDateString();
+    };
+    
+    return nameMatch && dateMatch();
+  });
 
   const handleDeposit = async () => {
     if (!selectedUser || !depositAmount) {
@@ -507,19 +551,28 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-gray-200 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-semibold text-gray-900">Admin Dashboard</h1>
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg">
+                <Settings className="h-6 w-6 text-white" />
+              </div>
+              <h1 className="text-xl font-bold text-gray-900">Admin Dashboard</h1>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">
-                Xin chào, {user?.username}
-              </span>
-              <Button variant="outline" size="sm" onClick={handleLogout}>
+              <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 rounded-full">
+                <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                <span className="text-sm font-medium text-gray-700">Xin chào, {user?.username}</span>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleLogout}
+                className="border-red-200 text-red-600 hover:bg-red-50"
+              >
                 <LogOut className="h-4 w-4 mr-2" />
                 Đăng xuất
               </Button>
@@ -529,15 +582,15 @@ export default function AdminDashboard() {
       </header>
 
       {/* Navigation */}
-      <nav className="bg-white border-b">
+      <nav className="bg-white/90 backdrop-blur-sm border-b border-gray-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex space-x-8">
+          <div className="flex space-x-1">
             <button
               onClick={() => setActiveTab('dashboard')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'dashboard'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <TrendingUp className="h-4 w-4 inline mr-2" />
@@ -545,10 +598,10 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('users')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'users'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <Users className="h-4 w-4 inline mr-2" />
@@ -556,10 +609,10 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('transactions')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'transactions'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <History className="h-4 w-4 inline mr-2" />
@@ -567,10 +620,10 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('deposits')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'deposits'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <Banknote className="h-4 w-4 inline mr-2" />
@@ -578,10 +631,10 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('banks')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'banks'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <Building className="h-4 w-4 inline mr-2" />
@@ -589,14 +642,25 @@ export default function AdminDashboard() {
             </button>
             <button
               onClick={() => setActiveTab('predictions')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
                 activeTab === 'predictions'
-                  ? 'border-blue-500 text-blue-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
               }`}
             >
               <Target className="h-4 w-4 inline mr-2" />
               Dự đoán phiên giao dịch
+            </button>
+            <button
+              onClick={() => setActiveTab('orders')}
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
+                activeTab === 'orders'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <History className="h-4 w-4 inline mr-2" />
+              Lệnh đặt
             </button>
           </div>
         </div>
@@ -609,47 +673,63 @@ export default function AdminDashboard() {
           <div className="space-y-6">
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Tổng người dùng</CardTitle>
-                  <Users className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.totalUsers}</div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Tổng nạp tiền</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {stats.totalDeposits.toLocaleString()}đ
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Tổng người dùng</p>
+                      <p className="text-3xl font-bold text-gray-900">{stats.totalUsers.toLocaleString()}</p>
+                      <p className="text-xs text-green-600 mt-1">+12% so với tháng trước</p>
+                    </div>
+                    <div className="p-3 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl">
+                      <Users className="h-8 w-8 text-white" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Tổng rút tiền</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-600">
-                    {stats.totalWithdrawals.toLocaleString()}đ
+              
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Tổng nạp tiền</p>
+                      <p className="text-3xl font-bold text-gray-900">{stats.totalDeposits.toLocaleString()}</p>
+                      <p className="text-xs text-green-600 mt-1">+8% so với tháng trước</p>
+                    </div>
+                    <div className="p-3 bg-gradient-to-r from-green-500 to-green-600 rounded-xl">
+                      <TrendingUp className="h-8 w-8 text-white" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Người dùng hoạt động</CardTitle>
-                  <Settings className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats.activeUsers}</div>
+              
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Tổng rút tiền</p>
+                      <p className="text-3xl font-bold text-gray-900">{stats.totalWithdrawals.toLocaleString()}</p>
+                      <p className="text-xs text-red-600 mt-1">+5% so với tháng trước</p>
+                    </div>
+                    <div className="p-3 bg-gradient-to-r from-red-500 to-red-600 rounded-xl">
+                      <DollarSign className="h-8 w-8 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              <Card className="bg-white/80 backdrop-blur-sm border-0 shadow-xl hover:shadow-2xl transition-all duration-300">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Người dùng hoạt động</p>
+                      <p className="text-3xl font-bold text-gray-900">{stats.activeUsers.toLocaleString()}</p>
+                      <p className="text-xs text-purple-600 mt-1">+15% so với tháng trước</p>
+                    </div>
+                    <div className="p-3 bg-gradient-to-r from-purple-500 to-purple-600 rounded-xl">
+                      <Settings className="h-8 w-8 text-white" />
+                    </div>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -713,77 +793,148 @@ export default function AdminDashboard() {
 
         {/* Users Tab */}
         {activeTab === 'users' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Quản lý người dùng</CardTitle>
+          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600 rounded-lg">
+                  <Users className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-900">Quản lý người dùng</CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">Quản lý và theo dõi tất cả người dùng trong hệ thống</p>
+                </div>
+              </div>
             </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Username</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Vai trò</TableHead>
-                    <TableHead>Số dư</TableHead>
-                    <TableHead>CCCD</TableHead>
-                    <TableHead>Ngân hàng</TableHead>
-                    <TableHead>Trạng thái</TableHead>
-                    <TableHead>Ngày tạo</TableHead>
-                    <TableHead>Hành động</TableHead>
-                  </TableRow>
-                </TableHeader>
+            <CardContent className="p-6">
+              {/* Search Filters */}
+              <div className="mb-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-4">
+                  <Search className="h-5 w-5 text-blue-600" />
+                  <h3 className="text-lg font-semibold text-gray-800">Tìm kiếm người dùng</h3>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="searchName" className="text-gray-700 font-medium">Tìm kiếm theo tên</Label>
+                    <div className="relative mt-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="searchName"
+                        placeholder="Nhập tên người dùng..."
+                        value={searchName}
+                        onChange={(e) => setSearchName(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label htmlFor="searchDateFrom" className="text-gray-700 font-medium">Ngày tạo giao dịch</Label>
+                    <Input
+                      id="searchDateFrom"
+                      type="date"
+                      value={searchDateFrom}
+                      onChange={(e) => setSearchDateFrom(e.target.value)}
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between">
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchName('');
+                      setSearchDateFrom('');
+                    }}
+                    className="flex items-center gap-2"
+                  >
+                    <X className="h-4 w-4" />
+                    Xóa bộ lọc
+                  </Button>
+                  <div className="text-sm text-gray-600 flex items-center gap-2">
+                    <Users className="h-4 w-4" />
+                    Tìm thấy {filteredUsers.length} người dùng
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-gradient-to-r from-gray-50 to-gray-100">
+                    <TableRow className="hover:bg-gray-50">
+                      <TableHead className="font-semibold text-gray-700">Username</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Vai trò</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Số dư</TableHead>
+                      <TableHead className="font-semibold text-gray-700">CCCD</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Ngân hàng</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Trạng thái</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Ngày tạo</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Hành động</TableHead>
+                    </TableRow>
+                  </TableHeader>
                 <TableBody>
-                  {users.map((user: any) => (
-                    <TableRow key={user._id}>
+                  {filteredUsers.map((user: any) => (
+                    <TableRow key={user._id} className="hover:bg-gray-50">
                       <TableCell className="font-medium">{user.username}</TableCell>
-                      <TableCell>{user.email || 'N/A'}</TableCell>
+                      {/* Vai trò */}
                       <TableCell>
-                        <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
-                          {user.role}
-                        </Badge>
+                        {user.role === 'admin' ? (
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-purple-500 text-white">Quản trị viên</span>
+                        ) : (
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-blue-500 text-white">Người dùng</span>
+                        )}
                       </TableCell>
-                                              <TableCell>
-                          <div>
-                            <div className="font-bold text-green-600">
-                              {user.balance?.available?.toLocaleString() || 0}đ
-                            </div>
-                            <div className="text-xs text-gray-500">
-                              Đã nạp: {user.totalDeposited?.toLocaleString() || 0}đ
-                            </div>
+                      {/* Số dư */}
+                      <TableCell>
+                        <div>
+                          <div className="font-bold text-green-600">
+                            {user.balance?.available?.toLocaleString() || 0}đ
                           </div>
-                        </TableCell>
+                          <div className="text-xs text-gray-500">
+                            Đã nạp: {user.totalDeposited?.toLocaleString() || 0}đ
+                          </div>
+                        </div>
+                      </TableCell>
+                      {/* CCCD */}
                       <TableCell>
                         {user.verification?.verified ? (
-                          <Badge variant="default">Đã xác minh</Badge>
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white">Đã xác minh</span>
                         ) : (
-                          <Badge variant="destructive">Chưa xác minh</Badge>
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-yellow-500 text-white">Đang xác minh</span>
                         )}
                       </TableCell>
+                      {/* Ngân hàng */}
                       <TableCell>
                         {user.bank?.name ? (
-                          <div>
-                            <div className="font-medium">{user.bank.name}</div>
-                            <div className="text-sm text-gray-500">{user.bank.accountNumber}</div>
-                            <div className="text-xs text-gray-400">{user.bank.accountHolder}</div>
+                          <div className="bg-green-50 p-2 rounded-lg border border-green-200">
+                            <div className="font-medium text-green-800">{user.bank.name}</div>
+                            <div className="text-sm text-green-600 font-mono">{user.bank.accountNumber}</div>
+                            <div className="text-xs text-green-500">{user.bank.accountHolder}</div>
                           </div>
                         ) : (
-                          'Chưa cập nhật'
+                          <div className="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <span className="text-gray-500 text-sm">Chưa cập nhật</span>
+                          </div>
                         )}
                       </TableCell>
+                      {/* Trạng thái tài khoản */}
                       <TableCell>
-                        <Badge variant={user.status?.active ? 'default' : 'destructive'}>
-                          {user.status?.active ? 'Hoạt động' : 'Khóa'}
-                        </Badge>
+                        {user.status?.active ? (
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white">Hoạt động</span>
+                        ) : (
+                          <span className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white">Bị khóa</span>
+                        )}
                       </TableCell>
+                      {/* Ngày tạo */}
                       <TableCell>
                         {new Date(user.createdAt).toLocaleDateString('vi-VN')}
                       </TableCell>
+                      {/* Hành động */}
                       <TableCell>
                         <div className="flex gap-2">
                           <Button
                             size="sm"
                             variant="outline"
                             onClick={() => handleViewUser(user)}
+                            className="hover:bg-blue-50 hover:text-blue-600"
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
@@ -792,6 +943,7 @@ export default function AdminDashboard() {
                             variant="destructive"
                             onClick={() => handleDeleteUser(user)}
                             disabled={user.role === 'admin'}
+                            className="hover:bg-red-50"
                           >
                             <Trash2 className="h-4 w-4" />
                           </Button>
@@ -801,6 +953,7 @@ export default function AdminDashboard() {
                   ))}
                 </TableBody>
               </Table>
+                </div>
             </CardContent>
           </Card>
         )}
@@ -821,6 +974,7 @@ export default function AdminDashboard() {
                     <TableHead>Trạng thái</TableHead>
                     <TableHead>Ghi chú</TableHead>
                     <TableHead>Thời gian</TableHead>
+                    <TableHead></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -839,12 +993,50 @@ export default function AdminDashboard() {
                       </TableCell>
                       <TableCell>
                         <Badge variant={transaction.status === 'completed' ? 'default' : 'destructive'}>
-                          {transaction.status === 'completed' ? 'Hoàn thành' : 'Đang xử lý'}
+                          {transaction.status === 'completed' ? 'Hoàn thành' : transaction.status === 'rejected' ? 'Từ chối' : 'Đang xử lý'}
                         </Badge>
                       </TableCell>
                       <TableCell>{transaction.note || 'N/A'}</TableCell>
                       <TableCell>
                         {new Date(transaction.createdAt).toLocaleString('vi-VN')}
+                      </TableCell>
+                      <TableCell>
+                        {(transaction.status === 'pending' || transaction.status === 'processing' || transaction.status === 'Đang xử lý' || transaction.status === 'Chờ duyệt') && (
+                          <div className="flex gap-2">
+                            <button
+                              className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition"
+                              onClick={async () => {
+                                await fetch('/api/admin/transactions', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                  },
+                                  body: JSON.stringify({ transactionId: transaction._id, action: 'approve' })
+                                });
+                                loadData();
+                              }}
+                            >
+                              Duyệt
+                            </button>
+                            <button
+                              className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition"
+                              onClick={async () => {
+                                await fetch('/api/admin/transactions', {
+                                  method: 'POST',
+                                  headers: {
+                                    'Content-Type': 'application/json',
+                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                  },
+                                  body: JSON.stringify({ transactionId: transaction._id, action: 'reject' })
+                                });
+                                loadData();
+                              }}
+                            >
+                              Từ chối
+                            </button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1124,6 +1316,93 @@ export default function AdminDashboard() {
               </CardContent>
             </Card>
           </div>
+        )}
+
+        {/* Orders Tab */}
+        {activeTab === 'orders' && (
+          <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+            <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b border-blue-200">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-blue-600 rounded-lg">
+                  <History className="h-5 w-5 text-white" />
+                </div>
+                <div>
+                  <CardTitle className="text-xl font-bold text-gray-900">Lịch sử lệnh đặt</CardTitle>
+                  <p className="text-sm text-gray-600 mt-1">Theo dõi toàn bộ lệnh đặt của người dùng</p>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              <div className="mb-4 flex flex-col md:flex-row md:items-center gap-4">
+                <label className="text-gray-700 font-medium text-sm">Lọc theo ngày đặt lệnh:
+                  <input
+                    type="date"
+                    value={searchOrderDate}
+                    onChange={e => setSearchOrderDate(e.target.value)}
+                    className="ml-2 border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </label>
+                {searchOrderDate && (
+                  <button
+                    className="ml-2 text-xs text-blue-600 hover:underline"
+                    onClick={() => setSearchOrderDate('')}
+                  >
+                    Xóa lọc ngày
+                  </button>
+                )}
+              </div>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <Table>
+                  <TableHeader className="bg-gradient-to-r from-gray-50 to-gray-100">
+                    <TableRow className="hover:bg-gray-50">
+                      <TableHead className="font-semibold text-gray-700">Username</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Loại lệnh</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Số tiền</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Trạng thái</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Thời gian đặt</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(orders.length > 0 ? orders : [
+                      // mock data nếu chưa có API
+                      { username: 'user1', type: 'Buy', amount: 1000000, status: 'Thành công', createdAt: new Date().toISOString() },
+                      { username: 'user2', type: 'Sell', amount: 500000, status: 'Đang xử lý', createdAt: new Date().toISOString() },
+                      { username: 'user3', type: 'Buy', amount: 2000000, status: 'Đã hủy', createdAt: new Date().toISOString() },
+                    ]).filter((order: any) => {
+                      if (!searchOrderDate) return true;
+                      const orderDate = new Date(order.createdAt);
+                      const searchDate = new Date(searchOrderDate);
+                      return orderDate.toDateString() === searchDate.toDateString();
+                    }).map((order: any, idx: number) => (
+                      <TableRow key={order._id || idx} className="hover:bg-gray-50">
+                        <TableCell className="font-medium">{order.username}</TableCell>
+                        <TableCell>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${order.type === 'Buy' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>{order.type}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="font-bold text-blue-700">{order.amount.toLocaleString()}đ</span>
+                        </TableCell>
+                        <TableCell>
+                          {order.status === 'Thành công' && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white">Thành công</span>
+                          )}
+                          {order.status === 'Đang xử lý' && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-yellow-500 text-white">Đang xử lý</span>
+                          )}
+                          {order.status === 'Đã hủy' && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white">Đã hủy</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {new Date(order.createdAt).toLocaleString('vi-VN')}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* User Edit Modal */}

@@ -385,9 +385,9 @@ export default function TradePage() {
     
     // Chỉ cập nhật khi component đã mount (tránh hydration mismatch)
     if (typeof window !== 'undefined') {
-      updateDateTime();
-      const interval = setInterval(updateDateTime, 1000);
-      return () => clearInterval(interval);
+    updateDateTime();
+    const interval = setInterval(updateDateTime, 1000);
+    return () => clearInterval(interval);
     }
   }, []);
 
