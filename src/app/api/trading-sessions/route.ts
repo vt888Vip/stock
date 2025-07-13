@@ -1,14 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { NextRequest } from 'next/server';
+import { processExpiredSessions } from '@/lib/sessionUtils';
 
-// API để lấy phiên hiện tại và tạo phiên mới
 export async function GET(request: NextRequest) {
   try {
     const db = await getMongoDb();
     if (!db) {
       throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
+
+    // Xử lý các phiên hết hạn trước khi trả về dữ liệu
+    await processExpiredSessions(db, 'TradingSessions');
 
     const now = new Date();
     const currentMinute = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes()));
@@ -36,39 +39,9 @@ export async function GET(request: NextRequest) {
 
     // Kiểm tra xem phiên hiện tại có kết thúc chưa
     if (currentSession && currentSession.endTime <= now) {
-      console.log('⏰ Phiên hiện tại đã kết thúc, chuyển sang PREDICTED');
+      console.log('⏰ Phiên hiện tại đã kết thúc, sẽ được xử lý bởi processExpiredSessions');
       
-      // Tạo kết quả random cho phiên đã kết thúc (60% UP, 40% DOWN)
-      const random = Math.random();
-      const predictedResult = random < 0.6 ? 'UP' : 'DOWN';
-      
-      // Chuyển phiên từ ACTIVE sang PREDICTED với kết quả
-      await db.collection('trading_sessions').updateOne(
-        { sessionId: currentSession.sessionId },
-        { 
-          $set: { 
-            status: 'PREDICTED',
-            result: predictedResult,
-            updatedAt: now
-          }
-        }
-      );
-      
-      console.log('📊 Đã cập nhật kết quả phiên:', currentSession.sessionId, 'Kết quả:', predictedResult);
-      
-      // Gọi API Cron để xử lý kết quả ngay lập tức
-      try {
-        console.log('🔄 Gọi API Cron để xử lý kết quả...');
-        const cronResponse = await fetch(`${request.nextUrl.origin}/api/cron/process-sessions`);
-        if (cronResponse.ok) {
-          const cronData = await cronResponse.json();
-          console.log('✅ Cron job đã xử lý kết quả:', cronData.message);
-        }
-      } catch (error) {
-        console.error('❌ Lỗi khi gọi Cron job:', error);
-      }
-      
-      // Cập nhật currentSession với dữ liệu mới
+      // Cập nhật currentSession với dữ liệu mới (nếu đã được xử lý)
       currentSession = await db.collection('trading_sessions').findOne({ 
         sessionId: currentSession.sessionId
       });

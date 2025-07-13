@@ -1,35 +1,17 @@
+import { ObjectId } from 'mongodb';
+
 /**
  * Tạo sessionId dựa trên thời gian hiện tại
  * Định dạng: YYMMDDHHmm (Ví dụ: 2507111927 cho 19:27 ngày 11/07/2025)
  */
-export const generateSessionId = (date: Date = new Date()): string => {
-  // Chuyển đổi sang múi giờ Việt Nam (UTC+7)
-  const options: Intl.DateTimeFormatOptions = { 
-    timeZone: 'Asia/Ho_Chi_Minh',
-    year: '2-digit',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false
-  };
-  
-  const formatter = new Intl.DateTimeFormat('en-US', options);
-  const parts = formatter.formatToParts(date);
-  
-  // Lấy các thành phần thời gian
-  const year = parts.find(part => part.type === 'year')?.value || '';
-  const month = parts.find(part => part.type === 'month')?.value || '';
-  const day = parts.find(part => part.type === 'day')?.value || '';
-  const hour = parts.find(part => part.type === 'hour')?.value || '';
-  const minute = parts.find(part => part.type === 'minute')?.value || '';
-
-  // Đảm bảo đủ 2 chữ số cho tất cả các thành phần
-  const pad = (num: string) => num.padStart(2, '0');
-  
-  // Format: YYMMDDHHmm (ví dụ: 2507111927)
-  return `${year}${pad(month)}${pad(day)}${pad(hour)}${pad(minute)}`;
-};
+export function generateSessionId(date: Date = new Date()): string {
+  const year = date.getUTCFullYear().toString();
+  const month = (date.getUTCMonth() + 1).toString().padStart(2, '0');
+  const day = date.getUTCDate().toString().padStart(2, '0');
+  const hours = date.getUTCHours().toString().padStart(2, '0');
+  const minutes = date.getUTCMinutes().toString().padStart(2, '0');
+  return `${year}${month}${day}${hours}${minutes}`;
+}
 
 /**
  * Lấy thông tin từ sessionId
@@ -58,3 +40,98 @@ export const parseSessionId = (sessionId: string) => {
     formattedDate: `${day.toString().padStart(2, '0')}/${(month + 1).toString().padStart(2, '0')}/${year}`
   };
 };
+
+// Hàm xử lý phiên hết hạn và công bố kết quả
+export async function processExpiredSessions(db: any, apiName: string = 'Unknown') {
+  const now = new Date();
+  
+  // Tìm các phiên đã hết hạn nhưng chưa được xử lý
+  const expiredSessions = await db.collection('trading_sessions').find({
+    status: { $in: ['ACTIVE', 'PREDICTED'] },
+    endTime: { $lte: now }
+  }).toArray();
+
+  console.log(`🔍 [${apiName}] Tìm thấy ${expiredSessions.length} phiên đã hết hạn cần xử lý`);
+
+  for (const session of expiredSessions) {
+    try {
+      console.log(`🔄 [${apiName}] Đang xử lý phiên: ${session.sessionId}`);
+      
+      // 1. Sinh kết quả phiên (60% UP, 40% DOWN)
+      const random = Math.random();
+      const result = random < 0.6 ? 'UP' : 'DOWN';
+
+      // 2. Cập nhật trạng thái phiên thành COMPLETED
+      await db.collection('trading_sessions').updateOne(
+        { _id: session._id },
+        { 
+          $set: { 
+            status: 'COMPLETED',
+            result: result,
+            updatedAt: now
+          }
+        }
+      );
+
+      console.log(`📊 [${apiName}] Phiên ${session.sessionId} kết quả: ${result}`);
+
+      // 3. Lấy tất cả lệnh của phiên này
+      const trades = await db.collection('trades').find({ 
+        sessionId: session.sessionId, 
+        status: 'pending' 
+      }).toArray();
+
+      console.log(`📋 [${apiName}] Tìm thấy ${trades.length} lệnh cần xử lý`);
+
+      for (const trade of trades) {
+        // 4. Xác định win/lose
+        const isWin = trade.direction === result;
+        const profit = isWin ? Math.floor(trade.amount * 0.95) : 0; // Thắng được 95%
+        const newStatus = 'completed';
+
+        // 5. Cập nhật lệnh
+        await db.collection('trades').updateOne(
+          { _id: trade._id },
+          { 
+            $set: { 
+              status: newStatus, 
+              result: isWin ? 'win' : 'lose', 
+              profit: profit,
+              updatedAt: now
+            }
+          }
+        );
+
+        // 6. Cập nhật số dư user
+        if (isWin) {
+          // Thắng: trả lại tiền cược + lợi nhuận
+          await db.collection('users').updateOne(
+            { _id: new ObjectId(trade.userId) },
+            { 
+              $inc: { 
+                'balance.available': profit + trade.amount,
+                'balance.frozen': -trade.amount 
+              },
+              $set: { updatedAt: now }
+            }
+          );
+          console.log(`💰 [${apiName}] User ${trade.userId} thắng: +${profit + trade.amount} VND`);
+        } else {
+          // Thua: chỉ trừ tiền cược (đã bị đóng băng)
+          await db.collection('users').updateOne(
+            { _id: new ObjectId(trade.userId) },
+            { 
+              $inc: { 'balance.frozen': -trade.amount },
+              $set: { updatedAt: now }
+            }
+          );
+          console.log(`💸 [${apiName}] User ${trade.userId} thua: -${trade.amount} VND`);
+        }
+      }
+
+      console.log(`✅ [${apiName}] Hoàn thành xử lý phiên ${session.sessionId}`);
+    } catch (error) {
+      console.error(`❌ [${apiName}] Lỗi khi xử lý phiên ${session.sessionId}:`, error);
+    }
+  }
+}

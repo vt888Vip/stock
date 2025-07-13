@@ -22,6 +22,9 @@ export async function POST(req: Request) {
     let { sessionId, direction, amount, asset } = await req.json();
     if (!asset) asset = 'Vàng/Đô la Mỹ'; // Mặc định là Vàng/Đô la Mỹ
     
+    // Log dữ liệu đầu vào
+    console.log('API /trades/place - Input:', { sessionId, direction, amount, asset });
+
     if (!sessionId || !direction || !amount || !asset) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
     }
@@ -40,98 +43,97 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Database connection failed' }, { status: 500 });
     }
 
-    // Bắt đầu transaction để đảm bảo tính nhất quán
-    const session = (db as any).client.startSession();
-    
     try {
-      await session.withTransaction(async () => {
-        // 1. Kiểm tra và lấy thông tin user
-        const userData = await db.collection('users').findOne(
-          { _id: new ObjectId(user.userId) },
-          { session }
-        );
-        
-        if (!userData) {
-          throw new Error('User not found');
-        }
+      // 1. Kiểm tra và lấy thông tin user
+      const userData = await db.collection('users').findOne(
+        { _id: new ObjectId(user.userId) }
+      );
+      
+      if (!userData) {
+        throw new Error('User not found');
+      }
 
-        // 2. Kiểm tra số dư khả dụng
-        const userBalance = userData.balance || { available: 0, frozen: 0 };
-        const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-        
-        if (availableBalance < amount) {
-          throw new Error('Insufficient balance');
-        }
+      // 2. Kiểm tra số dư khả dụng
+      const userBalance = userData.balance || { available: 0, frozen: 0 };
+      const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
+      
+      if (availableBalance < amount) {
+        throw new Error('Insufficient balance');
+      }
 
-        // 3. Kiểm tra phiên giao dịch
-        const tradingSession = await db.collection('trading_sessions').findOne(
-          { 
-            sessionId,
-            status: { $in: ['ACTIVE', 'PREDICTED'] }
-          },
-          { session }
-        );
-
-        if (!tradingSession) {
-          throw new Error('Trading session not found or not active');
-        }
-
-        // Kiểm tra phiên đã kết thúc chưa
-        if (tradingSession.endTime <= new Date()) {
-          throw new Error('Trading session has ended');
-        }
-
-        // 4. Trừ tiền khỏi available balance và cộng vào frozen balance
-        const newAvailableBalance = availableBalance - amount;
-        const currentFrozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
-        const newFrozenBalance = currentFrozenBalance + amount;
-
-        await db.collection('users').updateOne(
-          { _id: new ObjectId(user.userId) },
-          {
-            $set: {
-              balance: {
-                available: newAvailableBalance,
-                frozen: newFrozenBalance
-              },
-              updatedAt: new Date()
-            }
-          },
-          { session }
-        );
-
-        // 5. Tạo lệnh giao dịch
-        const trade = {
+      // 3. Kiểm tra phiên giao dịch
+      const tradingSession = await db.collection('trading_sessions').findOne(
+        { 
           sessionId,
-          userId: user.userId,
-          direction,
-          amount: Number(amount),
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date()
-        };
-
-        const tradeResult = await db.collection('trades').insertOne(trade, { session });
-
-        if (!tradeResult.insertedId) {
-          throw new Error('Failed to create trade');
+          status: { $in: ['ACTIVE', 'PREDICTED'] }
         }
+      );
 
-        console.log('✅ Trade placed successfully:', {
-          tradeId: tradeResult.insertedId,
-          sessionId,
-          userId: user.userId,
-          direction,
-          amount,
-          newAvailableBalance,
-          newFrozenBalance
-        });
-      });
+      if (!tradingSession) {
+        throw new Error('Trading session not found or not active');
+      }
 
-      // Transaction thành công
+      // Kiểm tra phiên đã kết thúc chưa
+      if (tradingSession.endTime <= new Date()) {
+        throw new Error('Trading session has ended');
+      }
+
+      // 4. Trừ tiền khỏi available balance và cộng vào frozen balance
+      const newAvailableBalance = availableBalance - amount;
+      const currentFrozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
+      const newFrozenBalance = currentFrozenBalance + amount;
+
+      const updateUserResult = await db.collection('users').updateOne(
+        { _id: new ObjectId(user.userId) },
+        {
+          $set: {
+            balance: {
+              available: newAvailableBalance,
+              frozen: newFrozenBalance
+            },
+            updatedAt: new Date()
+          }
+        }
+      );
+
+      if (updateUserResult.modifiedCount === 0) {
+        throw new Error('Failed to update user balance');
+      }
+
+      // 5. Tạo lệnh giao dịch
+      const trade = {
+        sessionId,
+        userId: new ObjectId(user.userId),
+        direction,
+        amount: Number(amount),
+        status: 'pending',
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+
+      console.log('API /trades/place - Insert trade:', trade);
+      const tradeResult = await db.collection('trades').insertOne(trade);
+      console.log('API /trades/place - Insert result:', tradeResult);
+
+      if (!tradeResult.insertedId) {
+        throw new Error('Failed to create trade');
+      }
+
+      // Lấy lại lệnh vừa insert để trả về frontend
+      const insertedTrade = await db.collection('trades').findOne({ _id: tradeResult.insertedId });
+      if (!insertedTrade) {
+        throw new Error('Inserted trade not found');
+      }
+
+      // Thành công
       return NextResponse.json({
         success: true,
         message: 'Trade placed successfully',
+        trade: {
+          ...insertedTrade,
+          _id: insertedTrade._id.toString(),
+          userId: insertedTrade.userId.toString()
+        },
         data: {
           sessionId,
           direction,
@@ -141,11 +143,8 @@ export async function POST(req: Request) {
       });
 
     } catch (error) {
-      // Rollback transaction nếu có lỗi
-      await session.abortTransaction();
+      console.error('Error placing trade:', error);
       throw error;
-    } finally {
-      await session.endSession();
     }
 
   } catch (error) {

@@ -67,6 +67,7 @@ export default function TradePage() {
   const [tradeResult, setTradeResult] = useState<TradeResult>({ status: "idle" });
   const [currentSessionResult, setCurrentSessionResult] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'ACTIVE' | 'PREDICTED' | 'COMPLETED'>('ACTIVE');
+  const [chartSymbol, setChartSymbol] = useState('TVC:GOLD');
 
   // Thêm state cho ngày và giờ hiện tại
   const [currentDate, setCurrentDate] = useState('');
@@ -381,10 +382,27 @@ export default function TradePage() {
       setCurrentDate(new Date().toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }));
       setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 1000);
-    return () => clearInterval(interval);
+    
+    // Chỉ cập nhật khi component đã mount (tránh hydration mismatch)
+    if (typeof window !== 'undefined') {
+      updateDateTime();
+      const interval = setInterval(updateDateTime, 1000);
+      return () => clearInterval(interval);
+    }
   }, []);
+
+  // Cập nhật symbol biểu đồ theo kết quả phiên giao dịch
+  useEffect(() => {
+    if (!currentSessionResult) {
+      setChartSymbol('TVC:GOLD');
+      return;
+    }
+    if (currentSessionResult === 'UP') {
+      setChartSymbol('TVC:GOLD');
+    } else if (currentSessionResult === 'DOWN') {
+      setChartSymbol('TVC:SILVER');
+    }
+  }, [currentSessionResult]);
 
   // Handle amount changes
   const addAmount = useCallback((value: number) => {
@@ -425,33 +443,94 @@ export default function TradePage() {
 
   // Confirm trade
   const confirmTrade = useCallback(async () => {
-    if (!selectedAction || !amount) return;
+    const token = localStorage.getItem('authToken');
+    // Debug log các giá trị quan trọng
+    console.log({
+      token,
+      sessionId: currentSessionId,
+      direction: selectedAction,
+      amount,
+    });
+
+    // Kiểm tra xem có đang trong quá trình loading không
+    if (isLoading) {
+      toast({
+        title: 'Đang tải dữ liệu',
+        description: 'Vui lòng đợi hệ thống tải xong dữ liệu',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!token) {
+      toast({
+        title: 'Lỗi xác thực',
+        description: 'Không tìm thấy token đăng nhập. Vui lòng đăng nhập lại.',
+        variant: 'destructive',
+      });
+      setIsSubmitting(false);
+      setIsConfirming(false);
+      return;
+    }
+    if (!selectedAction || !amount || !currentSessionId) {
+      toast({
+        title: 'Thiếu thông tin',
+        description: `Vui lòng kiểm tra lại: ${!selectedAction ? 'hướng lệnh' : ''} ${!amount ? 'số tiền' : ''} ${!currentSessionId ? 'phiên giao dịch' : ''}`,
+        variant: 'destructive',
+      });
+      setIsSubmitting(false);
+      setIsConfirming(false);
+      return;
+    }
+
+    // Kiểm tra số tiền hợp lệ
+    const amountValue = Number(amount);
+    if (isNaN(amountValue) || amountValue < 100000) {
+      toast({
+        title: 'Số tiền không hợp lệ',
+        description: 'Số tiền phải lớn hơn hoặc bằng 100,000 VND',
+        variant: 'destructive',
+      });
+      setIsSubmitting(false);
+      setIsConfirming(false);
+      return;
+    }
 
     setIsSubmitting(true);
     setIsConfirming(false);
 
     try {
+      // Debug log request body
+      const requestBody = {
+        sessionId: currentSessionId,
+        direction: selectedAction,
+        amount: Number(amount),
+        asset: 'Vàng/Đô la Mỹ'
+      };
+      console.log('Request body:', requestBody);
+
       // Gọi API để đặt lệnh
       const response = await fetch('/api/trades/place', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+          'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({
-          sessionId: currentSessionId,
-          direction: selectedAction,
-          amount: Number(amount),
-          asset: 'Vàng/Đô la Mỹ' // Default asset: Vàng/Đô la Mỹ
-        })
+        body: JSON.stringify(requestBody)
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.message || 'Lỗi khi đặt lệnh');
+        console.error('API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          errorData
+        });
+        throw new Error(errorData.message || `Lỗi ${response.status}: ${response.statusText}`);
       }
 
       const data = await response.json();
+      console.log('API Response:', data);
       
       if (data.success) {
         
@@ -471,7 +550,7 @@ export default function TradePage() {
         // Update balance by fetching real balance
         const balanceResponse = await fetch('/api/user/balance', {
           headers: {
-            'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            'Authorization': `Bearer ${token}`
           }
         });
         
@@ -817,7 +896,7 @@ export default function TradePage() {
               {/* Advanced Chart */}
               <Card className="bg-white border-gray-500 rounded-md shadow h-[500px]">
                 <CardContent className="p-2 h-full">
-                  <TradingViewAdvancedChart />
+                  <TradingViewAdvancedChart key={chartSymbol} symbol={chartSymbol} />
                 </CardContent>
               </Card>
 
@@ -850,7 +929,7 @@ export default function TradePage() {
               {/* Advanced Chart */}
               <Card className="bg-white border-gray-500 rounded-md shadow h-[400px]">
                 <CardContent className="p-2 h-full">
-                  <TradingViewAdvancedChart />
+                  <TradingViewAdvancedChart key={chartSymbol} symbol={chartSymbol} />
                 </CardContent>
               </Card>
             </div>
