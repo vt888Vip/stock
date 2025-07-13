@@ -84,6 +84,13 @@ export default function AdminDashboard() {
   const [searchDateFrom, setSearchDateFrom] = useState('');
   // 1. Thêm state cho searchOrderDate
   const [searchOrderDate, setSearchOrderDate] = useState('');
+  
+  // Orders search and pagination states
+  const [searchOrderUsername, setSearchOrderUsername] = useState('');
+  const [searchOrderSessionId, setSearchOrderSessionId] = useState('');
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
+  const [ordersTotal, setOrdersTotal] = useState(0);
 
   // Kiểm tra quyền truy cập
   useEffect(() => {
@@ -116,6 +123,56 @@ export default function AdminDashboard() {
       loadData();
     }
   }, [isAuthenticated, isAdmin]);
+
+  // Reload orders when search criteria change
+  useEffect(() => {
+    if (isAuthenticated() && isAdmin() && activeTab === 'orders') {
+      loadOrders();
+    }
+  }, [searchOrderUsername, searchOrderSessionId, searchOrderDate, ordersPage, activeTab]);
+
+  const loadOrders = async () => {
+    try {
+      const params = new URLSearchParams();
+      params.append('page', ordersPage.toString());
+      params.append('limit', '10');
+      if (searchOrderUsername) params.append('username', searchOrderUsername);
+      if (searchOrderSessionId) params.append('sessionId', searchOrderSessionId);
+      if (searchOrderDate) {
+        const date = new Date(searchOrderDate);
+        params.append('startDate', date.toISOString());
+        params.append('endDate', new Date(date.getTime() + 24 * 60 * 60 * 1000).toISOString());
+      }
+
+      const ordersResponse = await fetch(`/api/admin/orders?${params.toString()}`, {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      if (ordersResponse.ok) {
+        const ordersData = await ordersResponse.json();
+        if (ordersData.success && ordersData.data) {
+          setOrders(ordersData.data.orders || []);
+          setOrdersTotalPages(ordersData.data.pagination.totalPages);
+          setOrdersTotal(ordersData.data.pagination.total);
+        } else {
+          setOrders([]);
+          setOrdersTotalPages(1);
+          setOrdersTotal(0);
+        }
+      } else {
+        setOrders([]);
+        setOrdersTotalPages(1);
+        setOrdersTotal(0);
+      }
+    } catch (error) {
+      console.error('Error loading orders:', error);
+      setOrders([]);
+      setOrdersTotalPages(1);
+      setOrdersTotal(0);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -186,22 +243,9 @@ export default function AdminDashboard() {
         setBanks(banksData.banks || []);
       }
 
-      // Load orders
-      try {
-        const ordersResponse = await fetch('/api/admin/orders', {
-          credentials: 'include',
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
-          }
-        });
-        if (ordersResponse.ok) {
-          const ordersData = await ordersResponse.json();
-          setOrders(ordersData.orders || []);
-        } else {
-          setOrders([]);
-        }
-      } catch {
-        setOrders([]);
+      // Load initial orders
+      if (activeTab === 'orders') {
+        loadOrders();
       }
 
     } catch (error) {
@@ -1333,64 +1377,113 @@ export default function AdminDashboard() {
               </div>
             </CardHeader>
             <CardContent className="p-6">
-              <div className="mb-4 flex flex-col md:flex-row md:items-center gap-4">
-                <label className="text-gray-700 font-medium text-sm">Lọc theo ngày đặt lệnh:
-                  <input
-                    type="date"
-                    value={searchOrderDate}
-                    onChange={e => setSearchOrderDate(e.target.value)}
-                    className="ml-2 border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
-                  />
-                </label>
-                {searchOrderDate && (
-                  <button
-                    className="ml-2 text-xs text-blue-600 hover:underline"
-                    onClick={() => setSearchOrderDate('')}
-                  >
-                    Xóa lọc ngày
-                  </button>
-                )}
+              <div className="mb-4 space-y-4">
+                {/* Search filters */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="text-gray-700 font-medium text-sm">Tên tài khoản:
+                      <input
+                        type="text"
+                        placeholder="Nhập tên tài khoản..."
+                        value={searchOrderUsername}
+                        onChange={e => setSearchOrderUsername(e.target.value)}
+                        className="ml-2 w-full border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <label className="text-gray-700 font-medium text-sm">Phiên giao dịch:
+                      <input
+                        type="text"
+                        placeholder="Nhập mã phiên..."
+                        value={searchOrderSessionId}
+                        onChange={e => setSearchOrderSessionId(e.target.value)}
+                        className="ml-2 w-full border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                    </label>
+                  </div>
+                  <div>
+                    <label className="text-gray-700 font-medium text-sm">Ngày đặt lệnh:
+                      <input
+                        type="date"
+                        value={searchOrderDate}
+                        onChange={e => setSearchOrderDate(e.target.value)}
+                        className="ml-2 w-full border border-gray-300 rounded px-3 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200"
+                      />
+                    </label>
+                  </div>
+                  <div className="flex items-end">
+                    <button
+                      onClick={() => {
+                        setSearchOrderUsername('');
+                        setSearchOrderSessionId('');
+                        setSearchOrderDate('');
+                        setOrdersPage(1);
+                      }}
+                      className="px-4 py-1 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 transition-colors"
+                    >
+                      Xóa bộ lọc
+                    </button>
+                  </div>
+                </div>
+                
+                {/* Results info */}
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-600">
+                    Tìm thấy {ordersTotal} lệnh đặt
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Trang {ordersPage} / {ordersTotalPages}
+                  </div>
+                </div>
               </div>
               <div className="rounded-lg border border-gray-200 overflow-hidden">
                 <Table>
                   <TableHeader className="bg-gradient-to-r from-gray-50 to-gray-100">
                     <TableRow className="hover:bg-gray-50">
                       <TableHead className="font-semibold text-gray-700">Username</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Phiên</TableHead>
                       <TableHead className="font-semibold text-gray-700">Loại lệnh</TableHead>
                       <TableHead className="font-semibold text-gray-700">Số tiền</TableHead>
+                      <TableHead className="font-semibold text-gray-700">Lợi nhuận</TableHead>
                       <TableHead className="font-semibold text-gray-700">Trạng thái</TableHead>
                       <TableHead className="font-semibold text-gray-700">Thời gian đặt</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(orders.length > 0 ? orders : [
-                      // mock data nếu chưa có API
-                      { username: 'user1', type: 'Buy', amount: 1000000, status: 'Thành công', createdAt: new Date().toISOString() },
-                      { username: 'user2', type: 'Sell', amount: 500000, status: 'Đang xử lý', createdAt: new Date().toISOString() },
-                      { username: 'user3', type: 'Buy', amount: 2000000, status: 'Đã hủy', createdAt: new Date().toISOString() },
-                    ]).filter((order: any) => {
-                      if (!searchOrderDate) return true;
-                      const orderDate = new Date(order.createdAt);
-                      const searchDate = new Date(searchOrderDate);
-                      return orderDate.toDateString() === searchDate.toDateString();
-                    }).map((order: any, idx: number) => (
+                    {orders.map((order: any, idx: number) => (
                       <TableRow key={order._id || idx} className="hover:bg-gray-50">
                         <TableCell className="font-medium">{order.username}</TableCell>
+                        <TableCell className="font-mono text-sm">{order.sessionId}</TableCell>
                         <TableCell>
-                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${order.type === 'Buy' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>{order.type}</span>
+                          <span className={`rounded-full px-3 py-1 text-xs font-semibold ${order.direction === 'UP' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'}`}>
+                            {order.type}
+                          </span>
                         </TableCell>
                         <TableCell>
                           <span className="font-bold text-blue-700">{order.amount.toLocaleString()}đ</span>
                         </TableCell>
                         <TableCell>
-                          {order.status === 'Thành công' && (
-                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white">Thành công</span>
+                          {order.profit > 0 ? (
+                            <span className="font-bold text-green-600">+{order.profit.toLocaleString()}đ</span>
+                          ) : order.profit < 0 ? (
+                            <span className="font-bold text-red-600">{order.profit.toLocaleString()}đ</span>
+                          ) : (
+                            <span className="text-gray-500">-</span>
                           )}
-                          {order.status === 'Đang xử lý' && (
+                        </TableCell>
+                        <TableCell>
+                          {order.status === 'completed' && order.result === 'win' && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white">Thắng</span>
+                          )}
+                          {order.status === 'completed' && order.result === 'lose' && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white">Thua</span>
+                          )}
+                          {order.status === 'pending' && (
                             <span className="rounded-full px-3 py-1 text-xs font-semibold bg-yellow-500 text-white">Đang xử lý</span>
                           )}
-                          {order.status === 'Đã hủy' && (
-                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white">Đã hủy</span>
+                          {order.status === 'completed' && !order.result && (
+                            <span className="rounded-full px-3 py-1 text-xs font-semibold bg-gray-500 text-white">Hoàn thành</span>
                           )}
                         </TableCell>
                         <TableCell>
@@ -1401,6 +1494,48 @@ export default function AdminDashboard() {
                   </TableBody>
                 </Table>
               </div>
+              
+              {/* Pagination */}
+              {ordersTotalPages > 1 && (
+                <div className="mt-4 flex justify-center">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setOrdersPage(Math.max(1, ordersPage - 1))}
+                      disabled={ordersPage === 1}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Trước
+                    </button>
+                    
+                    {Array.from({ length: Math.min(5, ordersTotalPages) }, (_, i) => {
+                      const pageNum = Math.max(1, Math.min(ordersTotalPages - 4, ordersPage - 2)) + i;
+                      if (pageNum > ordersTotalPages) return null;
+                      
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setOrdersPage(pageNum)}
+                          className={`px-3 py-1 border rounded text-sm ${
+                            pageNum === ordersPage
+                              ? 'bg-blue-500 text-white border-blue-500'
+                              : 'border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    
+                    <button
+                      onClick={() => setOrdersPage(Math.min(ordersTotalPages, ordersPage + 1))}
+                      disabled={ordersPage === ordersTotalPages}
+                      className="px-3 py-1 border border-gray-300 rounded text-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
+                    >
+                      Sau
+                    </button>
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
