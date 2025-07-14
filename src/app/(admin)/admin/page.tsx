@@ -32,9 +32,10 @@ import {
   Search,
   X
 } from 'lucide-react';
+import UploadImage from '@/components/UploadImage';
 import { useToast } from '@/components/ui/use-toast';
 
-type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'orders' | 'session-results';
+type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'orders' | 'session-results' | 'predictions';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -1037,8 +1038,14 @@ export default function AdminDashboard() {
                         </span>
                       </TableCell>
                       <TableCell>
-                        <Badge variant={transaction.status === 'completed' ? 'default' : 'destructive'}>
-                          {transaction.status === 'completed' ? 'Hoàn thành' : transaction.status === 'rejected' ? 'Từ chối' : 'Đang xử lý'}
+                        <Badge variant={
+                          transaction.type === 'deposit'
+                            ? (transaction.status === 'completed' ? 'default' : 'destructive')
+                            : transaction.status === 'Đã duyệt' ? 'default' : transaction.status === 'Từ chối' ? 'destructive' : 'secondary'
+                        }>
+                          {transaction.type === 'deposit'
+                            ? (transaction.status === 'completed' ? 'Hoàn thành' : transaction.status === 'rejected' ? 'Từ chối' : 'Đang xử lý')
+                            : transaction.status}
                         </Badge>
                       </TableCell>
                       <TableCell>{transaction.note || 'N/A'}</TableCell>
@@ -1051,15 +1058,37 @@ export default function AdminDashboard() {
                             <button
                               className="rounded-full px-3 py-1 text-xs font-semibold bg-green-500 text-white hover:bg-green-600 transition"
                               onClick={async () => {
-                                await fetch('/api/admin/transactions', {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                  },
-                                  body: JSON.stringify({ transactionId: transaction._id, action: 'approve' })
-                                });
-                                loadData();
+                                if (transaction.type === 'withdrawal') {
+                                  const withdrawalId = transaction.withdrawalId || (typeof transaction._id === 'string' ? transaction._id : transaction._id?.toString?.() || '');
+                                  console.log('Duyệt rút tiền:', { withdrawalId, _id: transaction._id, raw: transaction });
+                                  if (!withdrawalId || !withdrawalId.startsWith('RUT-')) {
+                                    alert('Không tìm thấy withdrawalId hợp lệ để duyệt!');
+                                    return;
+                                  }
+                                  const res = await fetch('/api/admin/withdrawals', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                    },
+                                    body: JSON.stringify({ withdrawalId, action: 'approve' })
+                                  });
+                                  if (!res.ok) {
+                                    const data = await res.json();
+                                    alert(data.message || 'Lỗi khi duyệt rút tiền!');
+                                  }
+                                  loadData();
+                                } else {
+                                  await fetch('/api/admin/transactions', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                    },
+                                    body: JSON.stringify({ transactionId: transaction._id, action: 'approve' })
+                                  });
+                                  loadData();
+                                }
                               }}
                             >
                               Duyệt
@@ -1067,15 +1096,37 @@ export default function AdminDashboard() {
                             <button
                               className="rounded-full px-3 py-1 text-xs font-semibold bg-red-500 text-white hover:bg-red-600 transition"
                               onClick={async () => {
-                                await fetch('/api/admin/transactions', {
-                                  method: 'POST',
-                                  headers: {
-                                    'Content-Type': 'application/json',
-                                    'Authorization': `Bearer ${localStorage.getItem('token')}`
-                                  },
-                                  body: JSON.stringify({ transactionId: transaction._id, action: 'reject' })
-                                });
-                                loadData();
+                                if (transaction.type === 'withdrawal') {
+                                  const withdrawalId = transaction.withdrawalId || (typeof transaction._id === 'string' ? transaction._id : transaction._id?.toString?.() || '');
+                                  console.log('Từ chối rút tiền:', { withdrawalId, _id: transaction._id, raw: transaction });
+                                  if (!withdrawalId || !withdrawalId.startsWith('RUT-')) {
+                                    alert('Không tìm thấy withdrawalId hợp lệ để từ chối!');
+                                    return;
+                                  }
+                                  const res = await fetch('/api/admin/withdrawals', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                    },
+                                    body: JSON.stringify({ withdrawalId, action: 'reject' })
+                                  });
+                                  if (!res.ok) {
+                                    const data = await res.json();
+                                    alert(data.message || 'Lỗi khi từ chối rút tiền!');
+                                  }
+                                  loadData();
+                                } else {
+                                  await fetch('/api/admin/transactions', {
+                                    method: 'POST',
+                                    headers: {
+                                      'Content-Type': 'application/json',
+                                      'Authorization': `Bearer ${localStorage.getItem('token')}`
+                                    },
+                                    body: JSON.stringify({ transactionId: transaction._id, action: 'reject' })
+                                  });
+                                  loadData();
+                                }
                               }}
                             >
                               Từ chối
@@ -1688,21 +1739,71 @@ export default function AdminDashboard() {
                   <div className="grid grid-cols-2 gap-4 mt-2">
                     <div>
                       <Label className="text-sm">Mặt trước</Label>
-                      {editingUser.verification?.cccdFront && (
-                        <img 
-                          src={editingUser.verification.cccdFront} 
-                          alt="CCCD Front" 
-                          className="w-full h-32 object-cover rounded border"
+                      {editingUser.verification?.cccdFront ? (
+                        <div className="relative">
+                          <img 
+                            src={editingUser.verification.cccdFront} 
+                            alt="CCCD Front" 
+                            className="w-full h-32 object-cover rounded border"
+                          />
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setEditingUser({
+                              ...editingUser,
+                              verification: {...editingUser.verification, cccdFront: ''}
+                            })}
+                            className="absolute top-2 right-2"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <UploadImage
+                          onChange={(files) => {
+                            if (files.length > 0 && files[0].url) {
+                              setEditingUser({
+                                ...editingUser,
+                                verification: {...editingUser.verification, cccdFront: files[0].url}
+                              });
+                            }
+                          }}
+                          maxCount={1}
                         />
                       )}
                     </div>
                     <div>
                       <Label className="text-sm">Mặt sau</Label>
-                      {editingUser.verification?.cccdBack && (
-                        <img 
-                          src={editingUser.verification.cccdBack} 
-                          alt="CCCD Back" 
-                          className="w-full h-32 object-cover rounded border"
+                      {editingUser.verification?.cccdBack ? (
+                        <div className="relative">
+                          <img 
+                            src={editingUser.verification.cccdBack} 
+                            alt="CCCD Back" 
+                            className="w-full h-32 object-cover rounded border"
+                          />
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => setEditingUser({
+                              ...editingUser,
+                              verification: {...editingUser.verification, cccdBack: ''}
+                            })}
+                            className="absolute top-2 right-2"
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <UploadImage
+                          onChange={(files) => {
+                            if (files.length > 0 && files[0].url) {
+                              setEditingUser({
+                                ...editingUser,
+                                verification: {...editingUser.verification, cccdBack: files[0].url}
+                              });
+                            }
+                          }}
+                          maxCount={1}
                         />
                       )}
                     </div>

@@ -51,7 +51,7 @@ const UploadImage: React.FC<UploadImageProps> = ({
       const formData = new FormData()
       formData.append("file", file)
 
-      const response = await fetch("/api/upload", {
+      const response = await fetch("/api/admin/upload", {
         method: "POST",
         headers: {
           'Authorization': `Bearer ${token}`,

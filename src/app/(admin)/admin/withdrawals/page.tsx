@@ -26,6 +26,7 @@ interface Withdrawal {
   updatedAt: string;
   processedBy?: string;
   processedAt?: string;
+  userBalance?: number; // Số dư hiện tại của user
 }
 
 export default function WithdrawalsPage() {
@@ -39,6 +40,7 @@ export default function WithdrawalsPage() {
   const [action, setAction] = useState<'approve' | 'reject' | null>(null);
   const [notes, setNotes] = useState('');
   const [processing, setProcessing] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
 
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'admin')) {
@@ -171,16 +173,59 @@ export default function WithdrawalsPage() {
             <Badge variant="secondary" className="bg-blue-600">
               {withdrawals.filter(w => w.status === 'Chờ duyệt').length} chờ duyệt
             </Badge>
+            <Badge variant="secondary" className="bg-green-600">
+              {withdrawals.filter(w => w.status === 'Đã duyệt').length} đã duyệt
+            </Badge>
+            <Badge variant="secondary" className="bg-red-600">
+              {withdrawals.filter(w => w.status === 'Từ chối').length} từ chối
+            </Badge>
           </CardTitle>
         </CardHeader>
         <CardContent>
-          {withdrawals.length === 0 ? (
+          {/* Filter controls */}
+          <div className="mb-4 flex gap-2">
+            <Button
+              variant={statusFilter === 'all' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('all')}
+            >
+              Tất cả ({withdrawals.length})
+            </Button>
+            <Button
+              variant={statusFilter === 'Chờ duyệt' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('Chờ duyệt')}
+              className="bg-yellow-600 hover:bg-yellow-700"
+            >
+              Chờ duyệt ({withdrawals.filter(w => w.status === 'Chờ duyệt').length})
+            </Button>
+            <Button
+              variant={statusFilter === 'Đã duyệt' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('Đã duyệt')}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Đã duyệt ({withdrawals.filter(w => w.status === 'Đã duyệt').length})
+            </Button>
+            <Button
+              variant={statusFilter === 'Từ chối' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setStatusFilter('Từ chối')}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Từ chối ({withdrawals.filter(w => w.status === 'Từ chối').length})
+            </Button>
+          </div>
+
+          {withdrawals.filter(w => statusFilter === 'all' || w.status === statusFilter).length === 0 ? (
             <div className="text-center text-gray-400 py-8">
-              Không có yêu cầu rút tiền nào
+              Không có yêu cầu rút tiền nào {statusFilter !== 'all' && `với trạng thái "${statusFilter}"`}
             </div>
           ) : (
             <div className="space-y-4">
-              {withdrawals.map((withdrawal) => (
+              {withdrawals
+                .filter(w => statusFilter === 'all' || w.status === statusFilter)
+                .map((withdrawal) => (
                 <Card key={withdrawal._id} className="bg-gray-700 border-gray-600">
                   <CardContent className="p-4">
                     <div className="flex justify-between items-start mb-4">
@@ -264,9 +309,32 @@ export default function WithdrawalsPage() {
             <DialogDescription className="text-gray-400">
               {selectedWithdrawal && (
                 <div className="space-y-2">
-                  <p>Người dùng: {selectedWithdrawal.username}</p>
-                  <p>Số tiền: {selectedWithdrawal.amount.toLocaleString()} VND</p>
-                  <p>Ngân hàng: {selectedWithdrawal.bankName}</p>
+                  <p><strong>Người dùng:</strong> {selectedWithdrawal.username}</p>
+                  <p><strong>Số tiền:</strong> {selectedWithdrawal.amount.toLocaleString()} VND</p>
+                  <p><strong>Ngân hàng:</strong> {selectedWithdrawal.bankName}</p>
+                  <p><strong>Số tài khoản:</strong> {selectedWithdrawal.bankAccountNumber}</p>
+                  <p><strong>Chủ tài khoản:</strong> {selectedWithdrawal.accountHolder}</p>
+                  {action === 'approve' && (
+                    <div className="mt-2 p-2 bg-blue-900/20 border border-blue-600 rounded">
+                      <p className="text-blue-400 text-sm">
+                        💰 Số dư hiện tại: {selectedWithdrawal.userBalance?.toLocaleString() || 'Đang kiểm tra...'} VND
+                      </p>
+                    </div>
+                  )}
+                  {action === 'approve' && (
+                    <div className="mt-3 p-2 bg-yellow-900/20 border border-yellow-600 rounded">
+                      <p className="text-yellow-400 text-sm">
+                        ⚠️ Khi duyệt, số tiền sẽ được trừ khỏi tài khoản người dùng
+                      </p>
+                    </div>
+                  )}
+                  {action === 'reject' && (
+                    <div className="mt-3 p-2 bg-red-900/20 border border-red-600 rounded">
+                      <p className="text-red-400 text-sm">
+                        ❌ Yêu cầu sẽ bị từ chối và người dùng sẽ được thông báo
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </DialogDescription>

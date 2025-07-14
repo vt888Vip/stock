@@ -122,7 +122,7 @@ export default function WithdrawPage() {
       if (res.ok) {
         toast({ 
           title: 'Thành công', 
-          description: `Đã gửi yêu cầu rút tiền thành công. Số tiền ${withdrawAmount.toLocaleString()} VND đã được trừ khỏi tài khoản.` 
+          description: `Đã gửi yêu cầu rút tiền thành công. Yêu cầu của bạn đang chờ admin duyệt.` 
         });
         setAmount('');
         

@@ -101,14 +101,6 @@ export async function POST(req: NextRequest) {
     const result = await db.collection('withdrawals').insertOne(withdrawal);
     console.log('Withdrawal record created with ID:', result.insertedId);
 
-    // Tạm thời giảm số dư người dùng (sẽ hoàn lại nếu yêu cầu bị từ chối)
-    console.log('Updating user balance...');
-    await db.collection('users').updateOne(
-      { _id: new ObjectId(userId) },
-      { $inc: { balance: -amount } }
-    );
-    console.log('User balance updated');
-
     // Gửi thông báo cho admin (có thể triển khai sau)
     // TODO: Gửi thông báo cho admin qua socket hoặc email
 

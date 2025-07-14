@@ -48,6 +48,53 @@ const formatAmount = (value: string): string => {
   return isNaN(num) ? '' : num.toLocaleString('vi-VN');
 };
 
+// Hàm sync balance - chỉ sync khi tất cả trades đã hoàn thành
+async function syncBalance(setBalance: React.Dispatch<React.SetStateAction<number>>, setIsSyncing: React.Dispatch<React.SetStateAction<boolean>>, waitForPending = true) {
+  let tries = 0;
+  console.log('🔄 Starting balance sync...', waitForPending ? '(waiting for pending trades)' : '');
+  setIsSyncing(true);
+  
+  while (tries < 10) { // Tăng số lần thử lên 10
+    try {
+      const url = waitForPending 
+        ? '/api/user/balance/sync?waitForPending=true'
+        : '/api/user/balance/sync';
+        
+      const res = await fetch(url, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+        }
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        console.log('💰 Balance synced successfully:', data.balance.available);
+        setBalance(data.balance.available);
+        break;
+      } else if (res.status === 202) {
+        // Còn trades pending, chờ thêm
+        console.log(`⏳ ${data.pendingTradesCount} trades still pending, waiting...`);
+        await new Promise(r => setTimeout(r, 2000)); // Chờ 2 giây
+        tries++;
+      } else {
+        console.log('❌ Sync failed:', data.message);
+        tries++;
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    } catch (error) {
+      console.error('❌ Error syncing balance:', error);
+      tries++;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+  }
+  
+  if (tries >= 10) {
+    console.log('⚠️ Balance sync failed after 10 attempts');
+  }
+  
+  setIsSyncing(false);
+}
+
 export default function TradePage() {
   const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -68,6 +115,7 @@ export default function TradePage() {
   const [currentSessionResult, setCurrentSessionResult] = useState<string | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'ACTIVE' | 'PREDICTED' | 'COMPLETED'>('ACTIVE');
   const [chartSymbol, setChartSymbol] = useState('TVC:GOLD');
+  const [isSyncingBalance, setIsSyncingBalance] = useState(false);
 
   // Thêm state cho ngày và giờ hiện tại
   const [currentDate, setCurrentDate] = useState('');
@@ -163,11 +211,7 @@ export default function TradePage() {
             
             // Nếu phiên thay đổi, cập nhật sessionId và reset các trạng thái
             if (sessionChanged || newSessionId !== currentSessionId) {
-              console.log('🔄 Phiên đã thay đổi:', {
-                oldSessionId: currentSessionId,
-                newSessionId: newSessionId,
-                sessionChanged: sessionChanged
-              });
+              
               
               setCurrentSessionId(newSessionId);
               
@@ -202,19 +246,8 @@ export default function TradePage() {
                   }
                 }
 
-                // Cập nhật số dư sau khi phiên kết thúc
-                const balanceResponse = await fetch('/api/user/balance', {
-                  headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                  }
-                });
-                
-                if (balanceResponse.ok) {
-                  const balanceData = await balanceResponse.json();
-                  if (balanceData.success) {
-                    setBalance(balanceData.balance.available);
-                  }
-                }
+                // Không sync balance khi session thay đổi
+                // Balance sẽ được sync khi có kết quả trade
               }
             }
             
@@ -316,52 +349,46 @@ export default function TradePage() {
 
             setTradeHistory(formattedTrades);
 
-            // Check for new results
-            const currentTrade = formattedTrades.find(trade => trade.sessionId === currentSessionId);
-            if (currentTrade && currentTrade.status === 'completed' && currentTrade.result && !processedTradesRef.current.has(currentTrade.id)) {
-              processedTradesRef.current.add(currentTrade.id);
-              
-              if (currentTrade.result === 'win') {
-                setTradeResult({
-                  status: 'win',
-                  direction: currentTrade.direction,
-                  profit: currentTrade.profit,
-                  amount: currentTrade.amount,
-                });
-
-                toast({
-                  title: '🎉 Chúc mừng! Bạn đã thắng!',
-                  description: `Lệnh ${currentTrade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thắng ${formatCurrency(currentTrade.profit)}`,
-                  variant: 'default',
-                });
-              } else if (currentTrade.result === 'lose') {
-                setTradeResult({
-                  status: 'lose',
-                  direction: currentTrade.direction,
-                  profit: 0,
-                  amount: currentTrade.amount,
-                });
-
-                toast({
-                  title: '😔 Rất tiếc! Bạn đã thua!',
-                  description: `Lệnh ${currentTrade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thua ${formatCurrency(currentTrade.amount)}`,
-                  variant: 'destructive',
-                });
-              }
-
-              // Update balance
-              const balanceResponse = await fetch('/api/user/balance', {
-                headers: {
-                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                }
-              });
-              
-              if (balanceResponse.ok) {
-                const balanceData = await balanceResponse.json();
-                if (balanceData.success) {
-                  setBalance(balanceData.balance.available);
+            let hasNewCompletedTrade = false;
+            for (const trade of formattedTrades) {
+              if (
+                trade.status === 'completed' &&
+                trade.result &&
+                !processedTradesRef.current.has(trade.id)
+              ) {
+                processedTradesRef.current.add(trade.id);
+                hasNewCompletedTrade = true;
+                // Hiện toast nếu muốn
+                if (trade.result === 'win') {
+                  setTradeResult({
+                    status: 'win',
+                    direction: trade.direction,
+                    profit: trade.profit,
+                    amount: trade.amount,
+                  });
+                  toast({
+                    title: '🎉 Chúc mừng! Bạn đã thắng!',
+                    description: `Lệnh ${trade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thắng ${formatCurrency(trade.profit)}`,
+                    variant: 'default',
+                  });
+                } else if (trade.result === 'lose') {
+                  setTradeResult({
+                    status: 'lose',
+                    direction: trade.direction,
+                    profit: 0,
+                    amount: trade.amount,
+                  });
+                  toast({
+                    title: '😔 Rất tiếc! Bạn đã thua!',
+                    description: `Lệnh ${trade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thua ${formatCurrency(trade.amount)}`,
+                    variant: 'destructive',
+                  });
                 }
               }
+            }
+            if (hasNewCompletedTrade) {
+              console.log('🎯 Trade completed, syncing balance...');
+              await syncBalance(setBalance, setIsSyncingBalance, true); // Chờ tất cả pending trades hoàn thành
             }
           }
         }
@@ -507,7 +534,6 @@ export default function TradePage() {
         amount: Number(amount),
         asset: 'Vàng/Đô la Mỹ'
       };
-      console.log('Request body:', requestBody);
 
       // Gọi API để đặt lệnh
       const response = await fetch('/api/trades/place', {
@@ -546,28 +572,22 @@ export default function TradePage() {
         };
 
         setTradeHistory(prev => [newTrade, ...prev]);
-        
-        // Update balance by fetching real balance
-        const balanceResponse = await fetch('/api/user/balance', {
-          headers: {
-            'Authorization': `Bearer ${token}`
-          }
-        });
-        
-        if (balanceResponse.ok) {
-          const balanceData = await balanceResponse.json();
-          if (balanceData.success) {
-            setBalance(balanceData.balance.available);
-          }
-        }
-        
+
+        // Cập nhật số dư ngay trên UI (giảm available)
+        setBalance(prev => prev - Number(amount));
+        // Nếu có quản lý frozen, có thể cập nhật thêm ở đây
+
         setAmount('');
         setSelectedAction(null);
 
         toast({
           title: '✅ Đặt lệnh thành công!',
           description: `Lệnh ${selectedAction === 'UP' ? 'LÊN' : 'XUỐNG'} - ${formatCurrency(Number(amount))} - Đang đợi kết quả`,
+          duration: 1000, // Tự động đóng sau 1 giây
         });
+
+        // Không sync balance ngay sau khi đặt lệnh
+        // Balance sẽ được sync khi có kết quả trade
       }
     } catch (error) {
       console.error('Lỗi khi đặt lệnh:', error);

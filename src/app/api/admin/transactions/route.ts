@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       })),
       ...withdrawals.map((withdrawal: any) => ({
         _id: withdrawal._id,
+        withdrawalId: withdrawal.withdrawalId, // thêm trường này để frontend dùng
         username: withdrawal.username,
         type: 'withdrawal',
         amount: withdrawal.amount,

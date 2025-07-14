@@ -173,59 +173,61 @@ export async function PUT(
 
 // DELETE: Xóa người dùng
 export async function DELETE(
-  req: NextRequest,
+  request: NextRequest,
   { params }: { params: { id: string } }
 ) {
   try {
     // Xác thực admin
-    const token = req.headers.get('authorization')?.split(' ')[1];
+    const token = request.headers.get('authorization')?.split(' ')[1];
     if (!token) {
       return NextResponse.json({ message: 'Bạn cần đăng nhập' }, { status: 401 });
     }
 
-    const tokenData = await verifyToken(token);
-    if (!tokenData?.isValid) {
+    const { userId, isValid } = await verifyToken(token);
+    if (!isValid || !userId) {
       return NextResponse.json({ message: 'Token không hợp lệ' }, { status: 401 });
     }
-    
-    const db = await getMongoDb();
-    
+
     // Kiểm tra quyền admin
-    const admin = await db.collection('users').findOne({ _id: new ObjectId(tokenData.userId) });
+    const db = await getMongoDb();
+    const admin = await db.collection('users').findOne({ _id: new ObjectId(userId) });
     if (!admin || admin.role !== 'admin') {
       return NextResponse.json({ message: 'Không có quyền truy cập' }, { status: 403 });
     }
 
-    const userId = params.id;
+    const targetUserId = params.id;
 
-    // Kiểm tra xem người dùng có phải là admin không
-    const userToDelete = await db.collection('users').findOne({ _id: new ObjectId(userId) });
-    if (!userToDelete) {
+    if (!targetUserId) {
+      return NextResponse.json({ message: 'Thiếu ID người dùng' }, { status: 400 });
+    }
+
+    // Không cho phép xóa admin khác
+    const targetUser = await db.collection('users').findOne({ _id: new ObjectId(targetUserId) });
+    if (!targetUser) {
       return NextResponse.json({ message: 'Không tìm thấy người dùng' }, { status: 404 });
     }
 
-    if (userToDelete.role === 'admin') {
+    if (targetUser.role === 'admin') {
       return NextResponse.json({ message: 'Không thể xóa tài khoản admin' }, { status: 403 });
     }
 
-    // Xóa người dùng
-    const result = await db.collection('users').deleteOne({ _id: new ObjectId(userId) });
+    // Xóa user
+    await db.collection('users').deleteOne({ _id: new ObjectId(targetUserId) });
 
-    if (result.deletedCount === 0) {
-      return NextResponse.json({ message: 'Không thể xóa người dùng' }, { status: 400 });
-    }
+    // Xóa các dữ liệu liên quan (trades, withdrawals, etc.)
+    await db.collection('trades').deleteMany({ userId: new ObjectId(targetUserId) });
+    await db.collection('withdrawals').deleteMany({ user: new ObjectId(targetUserId) });
 
-    // Xóa các dữ liệu liên quan (tùy chọn)
-    // await db.collection('deposits').deleteMany({ user: new ObjectId(userId) });
-    // await db.collection('transactions').deleteMany({ userId: new ObjectId(userId) });
-
-    return NextResponse.json({ 
-      message: 'Đã xóa người dùng thành công',
-      userId: userId
+    return NextResponse.json({
+      success: true,
+      message: 'Đã xóa người dùng thành công'
     });
 
   } catch (error) {
     console.error('Error deleting user:', error);
-    return NextResponse.json({ message: 'Đã xảy ra lỗi khi xóa người dùng' }, { status: 500 });
+    return NextResponse.json(
+      { success: false, message: 'Lỗi khi xóa người dùng' },
+      { status: 500 }
+    );
   }
 } 
