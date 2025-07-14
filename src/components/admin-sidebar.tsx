@@ -4,7 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { useAuth } from "@/lib/useAuth"
 import { Button } from "@/components/ui/button"
-import { LogOut, Home, Users, Clock, ArrowDownToLine, ArrowUpFromLine, Settings, LineChart, Bot } from "lucide-react"
+import { LogOut, Home, Users, Clock, ArrowDownToLine, ArrowUpFromLine, Settings, LineChart, Bot, Target } from "lucide-react"
 
 const AdminSidebar = () => {
   const pathname = usePathname()
@@ -48,6 +48,11 @@ const AdminSidebar = () => {
       href: "/admin/orders",
       icon: <LineChart className="h-4 w-4" />,
       label: "Lịch sử giao dịch",
+    },
+    {
+      href: "/admin/session-results",
+      icon: <Target className="h-4 w-4" />,
+      label: "Kết quả phiên giao dịch",
     },
     {
       href: "/admin/auto-trading",

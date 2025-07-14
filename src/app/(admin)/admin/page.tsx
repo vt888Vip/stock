@@ -34,7 +34,7 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
 
-type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'predictions' | 'orders';
+type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'orders' | 'session-results';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -684,17 +684,7 @@ export default function AdminDashboard() {
               <Building className="h-4 w-4 inline mr-2" />
               Quản lý ngân hàng
             </button>
-            <button
-              onClick={() => setActiveTab('predictions')}
-              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
-                activeTab === 'predictions'
-                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
-                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              <Target className="h-4 w-4 inline mr-2" />
-              Dự đoán phiên giao dịch
-            </button>
+
             <button
               onClick={() => setActiveTab('orders')}
               className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
@@ -705,6 +695,17 @@ export default function AdminDashboard() {
             >
               <History className="h-4 w-4 inline mr-2" />
               Lệnh đặt
+            </button>
+            <button
+              onClick={() => setActiveTab('session-results')}
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
+                activeTab === 'session-results'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <Target className="h-4 w-4 inline mr-2" />
+              Kết quả phiên giao dịch
             </button>
           </div>
         </div>
@@ -1538,6 +1539,49 @@ export default function AdminDashboard() {
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Session Results Tab */}
+        {activeTab === 'session-results' && (
+          <div className="space-y-6">
+            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
+              <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-200">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-600 rounded-lg">
+                    <Target className="h-5 w-5 text-white" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</CardTitle>
+                    <p className="text-sm text-gray-600 mt-1">Đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch</p>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="p-6">
+                <div className="text-center py-8">
+                  <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Chức năng quản lý kết quả phiên giao dịch</h3>
+                  <p className="text-gray-500 mb-4">
+                    Tính năng này cho phép admin đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch.
+                  </p>
+                  <div className="space-y-2 text-sm text-gray-600">
+                    <p>• Đặt kết quả thủ công (LÊN/XUỐNG) cho từng phiên</p>
+                    <p>• Tạo kết quả ngẫu nhiên cho từng phiên</p>
+                    <p>• Tạo kết quả hàng loạt cho nhiều phiên</p>
+                    <p>• Theo dõi trạng thái và kết quả của các phiên</p>
+                  </div>
+                  <div className="mt-6">
+                    <Button 
+                      onClick={() => window.open('/admin/session-results', '_blank')}
+                      className="bg-purple-600 hover:bg-purple-700"
+                    >
+                      <Target className="h-4 w-4 mr-2" />
+                      Mở trang quản lý kết quả phiên giao dịch
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
         )}
 
         {/* User Edit Modal */}

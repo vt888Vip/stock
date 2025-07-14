@@ -57,9 +57,19 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
     try {
       console.log(`🔄 [${apiName}] Đang xử lý phiên: ${session.sessionId}`);
       
-      // 1. Sinh kết quả phiên (60% UP, 40% DOWN)
-      const random = Math.random();
-      const result = random < 0.6 ? 'UP' : 'DOWN';
+      // 1. Kiểm tra xem admin đã đặt kết quả chưa
+      let result = session.result;
+      let createdBy = session.createdBy || 'system';
+      
+      if (!result || session.status === 'ACTIVE') {
+        // Nếu chưa có kết quả hoặc phiên đang ACTIVE, tạo kết quả random
+        const random = Math.random();
+        result = random < 0.6 ? 'UP' : 'DOWN';
+        createdBy = 'system';
+        console.log(`🎲 [${apiName}] Tạo kết quả random cho phiên ${session.sessionId}: ${result}`);
+      } else {
+        console.log(`👑 [${apiName}] Sử dụng kết quả do admin đặt cho phiên ${session.sessionId}: ${result}`);
+      }
 
       // 2. Cập nhật trạng thái phiên thành COMPLETED
       await db.collection('trading_sessions').updateOne(
@@ -68,6 +78,9 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
           $set: { 
             status: 'COMPLETED',
             result: result,
+            actualResult: result, // Lưu kết quả thực tế
+            createdBy: createdBy,
+            completedAt: now,
             updatedAt: now
           }
         }
@@ -86,7 +99,7 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
       for (const trade of trades) {
         // 4. Xác định win/lose
         const isWin = trade.direction === result;
-        const profit = isWin ? Math.floor(trade.amount * 0.90) : 0; // Thắng được 90%
+        const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // Thắng được 90%
         const newStatus = 'completed';
 
         // 5. Cập nhật lệnh

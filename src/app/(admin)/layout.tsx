@@ -18,7 +18,7 @@ export default function AdminLayout({
 }) {
   return (
     <html lang="vi" suppressHydrationWarning>
-      <body className="min-h-screen bg-background font-sans antialiased">
+      <body className={cn("min-h-screen bg-background font-sans antialiased", inter.className)} suppressHydrationWarning>
         <ProtectedRoute requiredRole="admin">
           {children}
         </ProtectedRoute>
