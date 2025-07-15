@@ -112,7 +112,7 @@ export default function TradePage() {
   const [isConfirming, setIsConfirming] = useState(false);
   const [selectedAction, setSelectedAction] = useState<"UP" | "DOWN" | null>(null);
   const [tradeResult, setTradeResult] = useState<TradeResult>({ status: "idle" });
-  const [currentSessionResult, setCurrentSessionResult] = useState<string | null>(null);
+
   const [sessionStatus, setSessionStatus] = useState<'ACTIVE' | 'PREDICTED' | 'COMPLETED'>('ACTIVE');
   const [chartSymbol, setChartSymbol] = useState('TVC:GOLD');
   const [isSyncingBalance, setIsSyncingBalance] = useState(false);
@@ -217,7 +217,7 @@ export default function TradePage() {
               
               // Reset các trạng thái liên quan khi session mới bắt đầu
               setTradeResult({ status: 'idle' });
-              setCurrentSessionResult(null);
+
               
               // Nếu phiên thay đổi, cập nhật lịch sử giao dịch ngay lập tức
               if (sessionChanged) {
@@ -251,10 +251,6 @@ export default function TradePage() {
               }
             }
             
-            // Lấy kết quả phiên hiện tại
-            if (sessionData.currentSession.result) {
-              setCurrentSessionResult(sessionData.currentSession.result);
-            }
             setSessionStatus(sessionData.currentSession.status);
           }
         }
@@ -418,18 +414,10 @@ export default function TradePage() {
     }
   }, []);
 
-  // Cập nhật symbol biểu đồ theo kết quả phiên giao dịch
+  // Cập nhật symbol biểu đồ mặc định
   useEffect(() => {
-    if (!currentSessionResult) {
-      setChartSymbol('TVC:GOLD');
-      return;
-    }
-    if (currentSessionResult === 'UP') {
-      setChartSymbol('TVC:GOLD');
-    } else if (currentSessionResult === 'DOWN') {
-      setChartSymbol('TVC:SILVER');
-    }
-  }, [currentSessionResult]);
+    setChartSymbol('TVC:GOLD');
+  }, []);
 
   // Handle amount changes
   const addAmount = useCallback((value: number) => {
@@ -713,7 +701,7 @@ export default function TradePage() {
                   <div>Current Session ID: <span className="font-mono" suppressHydrationWarning>{currentSessionId}</span></div>
                   <div>Time Left: <span className="font-mono" suppressHydrationWarning>{timeLeft}s</span></div>
                   <div>Session Status: <span className="font-mono" suppressHydrationWarning>{sessionStatus}</span></div>
-                  <div>Session Result: <span className="font-mono" suppressHydrationWarning>{currentSessionResult || 'null'}</span></div>
+  
                   <div>Trade History: <span className="font-mono" suppressHydrationWarning>{tradeHistory.length} trades</span></div>
                   <div>Current Time: <span className="font-mono">{currentTime}</span></div>
                 </div>
@@ -721,27 +709,7 @@ export default function TradePage() {
             </Card>
           )}
 
-          {/* Session Result Display */}
-          {currentSessionResult && (
-            <Card className="mb-4 bg-blue-50 border-blue-200">
-              <CardHeader>
-                <CardTitle className="text-blue-800 text-sm">📊 Kết quả phiên hiện tại</CardTitle>
-              </CardHeader>
-              <CardContent className="text-sm text-blue-700">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <span className="font-medium">Phiên <span suppressHydrationWarning>{currentSessionId}</span>: </span>
-                    <span className={`font-bold text-lg ${currentSessionResult === 'UP' ? 'text-green-600' : 'text-red-600'}`} suppressHydrationWarning>
-                      {currentSessionResult === 'UP' ? '📈 LÊN' : '📉 XUỐNG'}
-                    </span>
-                  </div>
-                  <div className="text-xs text-gray-500" suppressHydrationWarning>
-                    {sessionStatus === 'PREDICTED' ? '🔮 Đã dự đoán' : sessionStatus === 'COMPLETED' ? '✅ Đã kết thúc' : '⏳ Đang diễn ra'}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )}
+
 
           {/* Desktop Layout - Đặt lệnh bên trái, biểu đồ và lịch sử bên phải */}
           <div className="hidden lg:grid lg:grid-cols-12 gap-6">
