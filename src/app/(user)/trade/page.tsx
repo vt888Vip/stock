@@ -354,32 +354,8 @@ export default function TradePage() {
               ) {
                 processedTradesRef.current.add(trade.id);
                 hasNewCompletedTrade = true;
-                // Hiện toast nếu muốn
-                if (trade.result === 'win') {
-                  setTradeResult({
-                    status: 'win',
-                    direction: trade.direction,
-                    profit: trade.profit,
-                    amount: trade.amount,
-                  });
-                  toast({
-                    title: '🎉 Chúc mừng! Bạn đã thắng!',
-                    description: `Lệnh ${trade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thắng ${formatCurrency(trade.profit)}`,
-                    variant: 'default',
-                  });
-                } else if (trade.result === 'lose') {
-                  setTradeResult({
-                    status: 'lose',
-                    direction: trade.direction,
-                    profit: 0,
-                    amount: trade.amount,
-                  });
-                  toast({
-                    title: '😔 Rất tiếc! Bạn đã thua!',
-                    description: `Lệnh ${trade.direction === 'UP' ? 'LÊN' : 'XUỐNG'} - Thua ${formatCurrency(trade.amount)}`,
-                    variant: 'destructive',
-                  });
-                }
+                // ĐÃ XOÁ: Không hiện toast hoặc Dialog thắng/thua nữa
+                // Không setTradeResult, không toast win/lose
               }
             }
             if (hasNewCompletedTrade) {
@@ -423,7 +399,8 @@ export default function TradePage() {
   const addAmount = useCallback((value: number) => {
     setAmount(prev => {
       const current = parseFloat(prev) || 0;
-      const newAmount = Math.max(100000, current + value);
+      if (value < 0) return '0'; // Nhấn dấu trừ thì về 0 luôn
+      const newAmount = current + value;
       return newAmount.toString();
     });
   }, []);
@@ -617,46 +594,10 @@ export default function TradePage() {
     <div className="min-h-screen bg-gray-900">
       <div className="p-4 md:p-8">
         <Dialog
-          open={tradeResult.status === "win" || tradeResult.status === "lose"}
-          onOpenChange={(open) => !open && setTradeResult({ status: "idle" })}
+          open={false} // ĐÃ XOÁ: Không mở Dialog kết quả thắng/thua nữa
+          onOpenChange={() => {}}
         >
-          <DialogContent className="sm:max-w-[425px] bg-gray-800 border-green-500">
-            <DialogHeader>
-              <DialogTitle className={`text-2xl text-center ${tradeResult.status === "win" ? "text-green-500" : "text-red-500"}`}>
-                {tradeResult.status === "win" ? "Chúc mừng bạn đã thắng!" : "Rất tiếc, bạn đã thua"}
-              </DialogTitle>
-              <DialogDescription className="text-center text-white">
-                {tradeResult.profit && tradeResult.profit > 0 ? "+" : ""}
-                {tradeResult.profit ? formatCurrency(tradeResult.profit) : 0} VND
-              </DialogDescription>
-            </DialogHeader>
-            <div className="grid gap-4 py-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="text-gray-400">Lệnh:</div>
-                <div className="text-white">
-                  {tradeResult.direction === "UP" ? "LÊN" : tradeResult.direction === "DOWN" ? "XUỐNG" : "-"}
-                </div>
-                <div className="text-gray-400">Số tiền:</div>
-                <div className="text-white">
-                  {tradeResult.amount ? formatCurrency(tradeResult.amount) : 0} VND
-                </div>
-                <div className="text-gray-400">Lợi nhuận:</div>
-                <div className={`font-bold ${(tradeResult.profit || 0) >= 0 ? "text-green-500" : "text-red-600"}`}>
-                  {tradeResult.profit && tradeResult.profit > 0 ? "+" : ""}
-                  {tradeResult.profit ? formatCurrency(tradeResult.profit) : 0} VND
-                </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                className="w-full bg-green-600 hover:bg-green-700"
-                onClick={() => setTradeResult({ status: "idle" })}
-              >
-                Đóng
-              </Button>
-            </DialogFooter>
-          </DialogContent>
+          {/* ĐÃ XOÁ: Nội dung Dialog kết quả thắng/thua */}
         </Dialog>
 
         <Dialog open={isConfirming} onOpenChange={setIsConfirming}>

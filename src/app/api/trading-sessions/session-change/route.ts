@@ -30,31 +30,21 @@ export async function GET(request: NextRequest) {
     // Nếu phiên đã kết thúc, tự động sửa các phiên đã kết thúc trước đó
     if (sessionEnded) {
       try {
-        console.log('🔧 Tự động sửa các phiên đã kết thúc...');
         const fixResponse = await fetch(`${request.nextUrl.origin}/api/trading-sessions/fix-expired`);
         if (fixResponse.ok) {
           const fixData = await fixResponse.json();
-          console.log('✅ Đã sửa phiên đã kết thúc:', fixData.message);
         }
       } catch (error) {
-        console.error('❌ Lỗi khi sửa phiên đã kết thúc:', error);
       }
     }
 
     if (sessionChanged) {
-      console.log('🔄 Phát hiện thay đổi phiên:', {
-        oldSessionId: currentSession?.sessionId,
-        newSessionId: sessionId,
-        sessionEnded,
-        now: now.toISOString()
-      });
 
       // Nếu phiên cũ đã kết thúc và có trạng thái PREDICTED, xử lý kết quả
       if (sessionEnded && currentSession && currentSession.status === 'PREDICTED') {
         const oldSessionId = currentSession.sessionId;
         const sessionResult = currentSession.result;
 
-        console.log('📊 Xử lý kết quả cho phiên PREDICTED:', oldSessionId, 'Kết quả:', sessionResult);
 
         // Tìm tất cả lệnh của phiên đã kết thúc
         const pendingTrades = await db.collection('trades').find({
@@ -62,7 +52,6 @@ export async function GET(request: NextRequest) {
           status: 'pending'
         }).toArray();
 
-        console.log(`🔍 Tìm thấy ${pendingTrades.length} lệnh pending cho phiên ${oldSessionId}`);
 
         // Thống kê kết quả
         let totalWins = 0;
@@ -87,8 +76,6 @@ export async function GET(request: NextRequest) {
             { _id: trade._id },
             { $set: updateData }
           );
-
-          console.log(`✅ Cập nhật lệnh ${trade._id}: ${isWin ? 'THẮNG' : 'THUA'} - Lợi nhuận: ${profit}`);
 
           // Cập nhật số dư người dùng
           const user = await db.collection('users').findOne({ _id: trade.userId });
@@ -117,8 +104,6 @@ export async function GET(request: NextRequest) {
                 }
               }
             );
-
-            console.log(`💰 Cập nhật số dư user ${trade.userId}: ${currentBalance} -> ${newBalance} (${isWin ? 'THẮNG' : 'THUA'})`);
           }
         }
 
@@ -138,8 +123,6 @@ export async function GET(request: NextRequest) {
             }
           }
         );
-
-        console.log(`📈 Thống kê phiên ${oldSessionId}: ${totalWins} thắng, ${totalLosses} thua, Tổng thắng: ${totalWinAmount}, Tổng thua: ${totalLossAmount}`);
       }
 
       // Tạo phiên mới nếu cần
@@ -153,8 +136,6 @@ export async function GET(request: NextRequest) {
           createdAt: now,
           updatedAt: now
         };
-
-        console.log('🆕 Tạo phiên mới với trạng thái ACTIVE:', newSession);
 
         // Tạo phiên mới (không xóa phiên cũ)
         await db.collection('trading_sessions').insertOne(newSession);

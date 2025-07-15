@@ -93,6 +93,21 @@ export async function POST(req: NextRequest) {
       { upsert: true }
     );
 
+    // Kiểm tra nếu đã đủ 2 ảnh thì tự động xác minh
+    const updatedUser = await db.collection('users').findOne({ _id: new ObjectId(user.userId) });
+    if (updatedUser?.verification?.cccdFront && updatedUser?.verification?.cccdBack) {
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(user.userId) },
+        {
+          $set: {
+            'verification.verified': true,
+            'verification.status': 'verified',
+            'verification.verifiedAt': new Date(),
+          }
+        }
+      );
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Tải lên thành công',

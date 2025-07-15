@@ -122,33 +122,22 @@ export default function LoginPage() {
   }
 
   return (
-    <div 
-      className="min-h-screen flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative"
-      style={{
-        backgroundImage: 'url(/logo-london.jpg)',
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat'
-      }}
-    >
-      {/* Semi-transparent overlay */}
-      <div className="absolute inset-0 bg-black/50"></div>
-      
-      {/* Logo */}
-      <div className="absolute top-8 left-1/2 transform -translate-x-1/2 z-10">
-        <img 
-          src="/logo.png" 
-          alt="Logo" 
-          className="h-16 w-auto"
-        />
-      </div>
-
-      <Card className="w-full max-w-md relative z-10 bg-white/95 backdrop-blur-sm border-0 shadow-2xl">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-2xl font-bold text-center">Đăng nhập</CardTitle>
-          <CardDescription className="text-center">Nhập thông tin đăng nhập của bạn</CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 px-2">
+      <Card className="w-full max-w-md sm:max-w-sm md:max-w-md lg:max-w-lg xl:max-w-xl relative z-10 bg-white/95 backdrop-blur-sm border-0 shadow-2xl flex flex-col items-center p-0">
+        {/* Logo-london.jpg ở trên cùng card */}
+        <div className="w-full h-28 sm:h-24 md:h-32 rounded-t-xl overflow-hidden flex items-center justify-center bg-gray-200">
+          <img
+            src="/logo-london.jpg"
+            alt="Banner"
+            className="w-full h-full object-cover"
+            style={{ minHeight: 80, maxHeight: 140 }}
+          />
+        </div>
+        <CardHeader className="space-y-1 w-full px-4 pt-4 pb-2">
+          <CardTitle className="text-xl md:text-2xl font-bold text-center">Đăng nhập</CardTitle>
+          <CardDescription className="text-center text-sm md:text-base">Nhập thông tin đăng nhập của bạn</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="w-full px-4 pb-4">
           {error && (
             <Alert variant={error.includes('Đăng nhập thành công') ? "default" : "destructive"} className="mb-4">
               <AlertDescription className="flex items-center">
@@ -224,5 +213,5 @@ export default function LoginPage() {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
