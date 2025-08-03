@@ -168,15 +168,17 @@ export default function Header() {
             CSKH
           </Button>
           
-          {/* Mobile menu button */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="md:hidden" 
-            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-          >
-            {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-          </Button>
+          {/* Mobile menu button - chỉ hiển thị khi đã đăng nhập */}
+          {user && (
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="md:hidden" 
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            >
+              {isMobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            </Button>
+          )}
           
           {/* User Account dropdown */}
           <DropdownMenu open={isUserDropdownOpen} onOpenChange={setIsUserDropdownOpen}>

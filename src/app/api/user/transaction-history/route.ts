@@ -66,7 +66,7 @@ export async function GET(request: NextRequest) {
         description: `Nạp tiền - ${userBankInfo.name || 'Ngân hàng'}`,
         createdAt: deposit.createdAt,
         updatedAt: deposit.updatedAt,
-        proofImage: deposit.proofImage,
+        proofImage: deposit.proofImage || null,
         bankInfo: {
           bankName: userBankInfo.name || '',
           accountNumber: userBankInfo.accountNumber || '',

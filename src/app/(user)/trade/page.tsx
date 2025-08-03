@@ -445,9 +445,9 @@ export default function TradePage() {
     
     // Chỉ cập nhật khi component đã mount (tránh hydration mismatch)
     if (typeof window !== 'undefined') {
-    updateDateTime();
-    const interval = setInterval(updateDateTime, 1000);
-    return () => clearInterval(interval);
+      updateDateTime();
+      const interval = setInterval(updateDateTime, 1000);
+      return () => clearInterval(interval);
     }
   }, []);
 
@@ -698,7 +698,7 @@ export default function TradePage() {
                    <div>Session Status: <span className="font-mono" suppressHydrationWarning>{sessionStatus}</span></div>
    
                    <div>Trade History: <span className="font-mono" suppressHydrationWarning>{tradeHistory.length} trades</span></div>
-                   <div>Current Time: <span className="font-mono">{currentTime}</span></div>
+                   <div>Current Time: <span className="font-mono" suppressHydrationWarning>{currentTime}</span></div>
                    <div>Update Countdown: <span className="font-mono" suppressHydrationWarning>{updateCountdown !== null ? `${updateCountdown}s` : 'N/A'}</span></div>
                    <div>Countdown Started: <span className="font-mono" suppressHydrationWarning>{countdownStarted ? 'Yes' : 'No'}</span></div>
                    <div>Balance Locked: <span className="font-mono" suppressHydrationWarning>{isBalanceLocked ? 'Yes' : 'No'}</span></div>
@@ -731,55 +731,28 @@ export default function TradePage() {
                 <CardHeader>
                   <div className="flex items-center space-x-2">
                     <ChevronDown className="h-4 w-4 text-gray-700" />
-                    <CardTitle className="text-gray-900 text-base font-medium">Số dư</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent className="py-6 px-4">
-                  <div className="flex items-center justify-between text-gray-900 text-lg font-semibold uppercase">
-                    <span>SỐ DƯ:</span>
-                    <span suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
-                  </div>
-                  
-                  {/* Thông báo hết tiền và nút nạp tiền */}
-                  {balance <= 0 && (
-                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                      <div className="flex items-center space-x-2 mb-2">
-                        <AlertCircle className="h-5 w-5 text-red-500" />
-                        <span className="text-red-700 font-semibold">Hết tiền!</span>
-                      </div>
-                      <p className="text-red-600 text-sm mb-3">
-                        Bạn cần nạp tiền để có thể đặt lệnh giao dịch.
-                      </p>
-                      <Button 
-                        onClick={handleDeposit}
-                        className="w-full bg-red-600 hover:bg-red-700 text-white"
-                      >
-                        <Wallet className="h-4 w-4 mr-2" />
-                        Nạp tiền ngay
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-
-              <Card className="bg-white border border-gray-300 rounded-md shadow">
-                <CardHeader>
-                  <div className="flex items-center space-x-2">
-                    <ChevronDown className="h-4 w-4 text-gray-700" />
                     <CardTitle className="text-gray-900 text-base font-medium">Đặt lệnh</CardTitle>
                     <span className="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded ml-auto" suppressHydrationWarning>
                       Phiên: {currentSessionId || 'N/A'}
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent>
-                  <div className="mb-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <label htmlFor="amount" className="text-sm text-gray-400">
-                        Số tiền (VND)
-                      </label>
-                      <span className="text-xs text-gray-400">Tối thiểu: {formatCurrency(100000)}</span>
-                    </div>
+                                 <CardContent>
+                   {/* Hiển thị số dư */}
+                   <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                     <div className="flex items-center justify-between text-blue-900">
+                       <span className="font-semibold">SỐ DƯ:</span>
+                       <span className="text-lg font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
+                     </div>
+                   </div>
+                   
+                   <div className="mb-4">
+                     <div className="flex justify-between items-center mb-2">
+                       <label htmlFor="amount" className="text-sm text-gray-400">
+                         Số tiền (VND)
+                       </label>
+                       <span className="text-xs text-gray-400">Tối thiểu: {formatCurrency(100000)}</span>
+                     </div>
                     <div className="flex items-center space-x-2">
                       <Button variant="outline" size="icon" onClick={() => addAmount(-100000)}>
                         <Minus className="h-4 w-4" />
@@ -935,42 +908,6 @@ export default function TradePage() {
               </Card>
             </div>
 
-            {/* 2. Số dư */}
-            <Card className="bg-white border border-gray-300 rounded-md shadow">
-              <CardHeader>
-                <div className="flex items-center space-x-2">
-                  <ChevronDown className="h-4 w-4 text-gray-700" />
-                  <CardTitle className="text-gray-900 text-base font-medium">Số dư</CardTitle>
-                </div>
-              </CardHeader>
-              <CardContent className="py-6 px-4">
-                <div className="flex items-center justify-between text-gray-900 text-lg font-semibold uppercase">
-                  <span>SỐ DƯ:</span>
-                  <span suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
-                </div>
-                
-                {/* Thông báo hết tiền và nút nạp tiền */}
-                {balance <= 0 && (
-                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-                    <div className="flex items-center space-x-2 mb-2">
-                      <AlertCircle className="h-5 w-5 text-red-500" />
-                      <span className="text-red-700 font-semibold">Hết tiền!</span>
-                    </div>
-                    <p className="text-red-600 text-sm mb-3">
-                      Bạn cần nạp tiền để có thể đặt lệnh giao dịch.
-                    </p>
-                    <Button 
-                      onClick={handleDeposit}
-                      className="w-full bg-red-600 hover:bg-red-700 text-white"
-                    >
-                      <Wallet className="h-4 w-4 mr-2" />
-                      Nạp tiền ngay
-                    </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
             {/* 3. Đặt lệnh */}
             <Card className="bg-white border border-gray-300 rounded-md shadow">
               <CardHeader>
@@ -982,14 +919,22 @@ export default function TradePage() {
                   </span>
                 </div>
               </CardHeader>
-              <CardContent>
-                <div className="mb-4">
-                  <div className="flex justify-between items-center mb-2">
-                    <label htmlFor="amount-mobile" className="text-sm text-gray-400">
-                      Số tiền (VND)
-                    </label>
-                    <span className="text-xs text-gray-400">Tối thiểu: {formatCurrency(100000)}</span>
-                  </div>
+                             <CardContent>
+                 {/* Hiển thị số dư */}
+                 <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                   <div className="flex items-center justify-between text-blue-900">
+                     <span className="font-semibold text-sm">SỐ DƯ:</span>
+                     <span className="text-base font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
+                   </div>
+                 </div>
+                 
+                 <div className="mb-4">
+                   <div className="flex justify-between items-center mb-2">
+                     <label htmlFor="amount-mobile" className="text-sm text-gray-400">
+                       Số tiền (VND)
+                     </label>
+                     <span className="text-xs text-gray-400">Tối thiểu: {formatCurrency(100000)}</span>
+                   </div>
                   <div className="flex items-center space-x-2">
                     <Button variant="outline" size="icon" onClick={() => addAmount(-100000)}>
                       <Minus className="h-4 w-4" />
@@ -1024,7 +969,7 @@ export default function TradePage() {
                     ))}
                   </div>
                 </div>
-                <div className="space-y-1 mb-4 text-sm text-gray-900">
+                <div className="space-y-1 mb-4 text-xs text-gray-900">
                   <div className="flex justify-between">
                     <span>Ngày:</span>
                     <span suppressHydrationWarning>{currentDate}</span>
@@ -1039,27 +984,27 @@ export default function TradePage() {
                   </div>
                 </div>
                 <div className="mb-4">
-                  <div className="border border-red-600 rounded bg-gray-100 text-center py-3">
-                    <div className="text-sm text-gray-900">Hãy đặt lệnh:</div>
-                    <div className="text-xl font-bold text-red-600" suppressHydrationWarning>{String(timeLeft).padStart(2, '0')}s</div>
+                  <div className="border border-red-600 rounded bg-gray-100 text-center py-2">
+                    <div className="text-xs text-gray-900">Hãy đặt lệnh:</div>
+                    <div className="text-lg font-bold text-red-600" suppressHydrationWarning>{String(timeLeft).padStart(2, '0')}s</div>
                   </div>
                 </div>
                 <div className="space-y-3">
                   <Button
                     type="button"
-                    className="w-full h-14 bg-green-600 hover:bg-green-700 text-lg font-bold flex items-center justify-center"
+                    className="w-full h-12 bg-green-600 hover:bg-green-700 text-base font-bold flex items-center justify-center"
                     onClick={() => handleAction("UP")}
                     disabled={isLoading || !amount || isSubmitting || balance <= 0}
                   >
-                    LÊN <ArrowUp className="h-5 w-5 ml-2" />
+                    LÊN <ArrowUp className="h-4 w-4 ml-2" />
                   </Button>
                   <Button
                     type="button"
-                    className="w-full h-14 bg-red-600 hover:bg-red-700 text-lg font-bold flex items-center justify-center"
+                    className="w-full h-12 bg-red-600 hover:bg-red-700 text-base font-bold flex items-center justify-center"
                     onClick={() => handleAction("DOWN")}
                     disabled={isLoading || !amount || isSubmitting || balance <= 0}
                   >
-                    XUỐNG <ArrowDown className="h-5 w-5 ml-2" />
+                    XUỐNG <ArrowDown className="h-4 w-4 ml-2" />
                   </Button>
                   
                   {/* Thông báo hết tiền trong form đặt lệnh */}

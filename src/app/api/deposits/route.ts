@@ -33,9 +33,9 @@ export async function POST(req: NextRequest) {
 
     // Lấy dữ liệu từ request body (JSON)
     const body = await req.json();
-    const { amount, bill, bank, confirmed } = body;
+    const { amount, bank, confirmed } = body;
 
-    if (!amount || !bill || !bank || !confirmed) {
+    if (!amount || !bank || !confirmed) {
       return NextResponse.json({ message: 'Thiếu thông tin cần thiết' }, { status: 400 });
     }
 
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest) {
       username: user.username || '',
       amount: Number(amount),
       status: 'CHO XU LY',
-      proofImage: bill,
+      proofImage: null, // Không còn yêu cầu bill
       bankInfo: { bankName: bank },
       createdAt: new Date(),
       updatedAt: new Date()
