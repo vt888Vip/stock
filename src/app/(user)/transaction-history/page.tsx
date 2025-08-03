@@ -35,6 +35,7 @@ export default function TransactionHistoryPage() {
   const [totalPages, setTotalPages] = useState(1);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [showBankModal, setShowBankModal] = useState(false);
+  const [expandedWithdrawals, setExpandedWithdrawals] = useState<Set<string>>(new Set());
 
   // Helper function to get token
   const getToken = () => {
@@ -105,28 +106,47 @@ export default function TransactionHistoryPage() {
     }
   };
 
-  const getStatusBadge = (status: string, result?: string) => {
-    if (result === 'win') {
-      return <Badge className="bg-green-500">THẮNG</Badge>;
-    } else if (result === 'lose') {
-      return <Badge className="bg-red-500">THUA</Badge>;
-    }
-
-    switch (status) {
-      case 'DA DUYET':
-        return <Badge className="bg-green-500">Đã duyệt</Badge>;
-      case 'CHO XU LY':
-        return <Badge className="bg-yellow-500">Chờ xử lý</Badge>;
-      case 'TU CHOI':
-        return <Badge className="bg-red-500">Từ chối</Badge>;
-      case 'completed':
-        return <Badge className="bg-blue-500">Hoàn thành</Badge>;
-      case 'pending':
-        return <Badge className="bg-yellow-500">Đang xử lý</Badge>;
-      default:
-        return <Badge className="bg-gray-500">{status}</Badge>;
-    }
+  // Handle withdrawal expansion toggle
+  const toggleWithdrawalExpansion = (transactionId: string) => {
+    setExpandedWithdrawals(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(transactionId)) {
+        newSet.delete(transactionId);
+      } else {
+        newSet.add(transactionId);
+      }
+      return newSet;
+    });
   };
+
+     const getStatusBadge = (status: string, result?: string) => {
+     if (result === 'win') {
+       return <Badge className="bg-green-500">THẮNG</Badge>;
+     } else if (result === 'lose') {
+       return <Badge className="bg-red-500">THUA</Badge>;
+     }
+
+     switch (status) {
+       case 'DA DUYET':
+       case 'Đã duyệt':
+         return <Badge className="bg-green-500">Đã duyệt</Badge>;
+       case 'CHO XU LY':
+       case 'Chờ duyệt':
+       case 'Chờ xử lý':
+         return <Badge className="bg-yellow-500">Chờ duyệt</Badge>;
+       case 'TU CHOI':
+       case 'Từ chối':
+         return <Badge className="bg-red-500">Từ chối</Badge>;
+       case 'completed':
+       case 'Hoàn thành':
+         return <Badge className="bg-blue-500">Hoàn thành</Badge>;
+       case 'pending':
+       case 'Đang xử lý':
+         return <Badge className="bg-yellow-500">Đang xử lý</Badge>;
+       default:
+         return <Badge className="bg-gray-500">{status}</Badge>;
+     }
+   };
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -151,187 +171,259 @@ export default function TransactionHistoryPage() {
     });
   };
 
-  const renderTransaction = (transaction: Transaction) => (
-    <Card 
-      key={transaction._id} 
-      className={`mb-4 ${(transaction.type === 'withdrawal' || transaction.type === 'deposit') ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
-      onClick={() => handleTransactionClick(transaction)}
-    >
-      <CardContent className="p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <span className="text-2xl">{getTypeIcon(transaction.type)}</span>
-            <div>
-              <h3 className="font-semibold">{transaction.description}</h3>
-              <p className="text-sm text-gray-500">{formatDate(transaction.createdAt)}</p>
-              {transaction.adminNote && (
-                <p className="text-sm text-gray-600 mt-1">Ghi chú: {transaction.adminNote}</p>
-              )}
-            </div>
-          </div>
-          <div className="text-right">
-            <div className="flex items-center space-x-2">
-              {transaction.type === 'trade' && transaction.result === 'win' && (
-                <span className="text-green-600 font-semibold">
-                  +{formatCurrency(transaction.amount + (transaction.profit || 0))}
+  const renderTransaction = (transaction: Transaction) => {
+    // Nếu là withdrawal, hiển thị giao diện giống như đã bỏ khỏi trang withdraw
+    if (transaction.type === 'withdrawal') {
+      return (
+        <Card key={transaction._id} className="mb-4 bg-gradient-to-r from-slate-50 to-gray-50 border border-slate-200">
+          <CardContent className="p-3 sm:p-4">
+                         <div className="flex justify-between items-start mb-2">
+               <div className="flex flex-col gap-2">
+                 <span className="font-semibold text-slate-800 text-sm sm:text-base">
+                   {transaction.amount?.toLocaleString()} VND
+                 </span>
+                 <div className="flex-shrink-0">
+                   {getStatusBadge(transaction.status)}
+                 </div>
+               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 flex-shrink-0">
+                  {formatDate(transaction.createdAt)}
                 </span>
-              )}
-              {transaction.type === 'trade' && transaction.result === 'lose' && (
-                <span className="text-red-600 font-semibold">
-                  -{formatCurrency(transaction.amount)}
-                </span>
-              )}
-              {transaction.type !== 'trade' && (
-                <span className={`font-semibold ${
-                  transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
-                }`}>
-                  {transaction.type === 'deposit' ? '+' : '-'}{formatCurrency(transaction.amount)}
-                </span>
-              )}
-              {getStatusBadge(transaction.status, transaction.result || undefined)}
-            </div>
-            {transaction.type === 'trade' && transaction.result === 'win' && (
-              <p className="text-sm text-green-600">
-                Lợi nhuận: +{formatCurrency(transaction.profit || 0)}
-              </p>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
+                                 <Button
+                   variant="ghost"
+                   size="sm"
+                   onClick={(e) => {
+                     e.stopPropagation();
+                     toggleWithdrawalExpansion(transaction._id);
+                   }}
+                   className="h-6 w-6 p-0 hover:bg-slate-200 text-slate-600"
+                 >
+                   <span className="text-lg font-bold">
+                     {expandedWithdrawals.has(transaction._id) ? '-' : '+'}
+                   </span>
+                 </Button>
+               </div>
+             </div>
+             
+             {/* Thông tin ngân hàng - chỉ hiển thị khi click dấu + */}
+             {expandedWithdrawals.has(transaction._id) && transaction.bankInfo && (
+               <div className="space-y-1 text-xs sm:text-sm border-t border-slate-200 pt-2 mt-2">
+                 <div className="flex justify-between">
+                   <span className="text-slate-600">Ngân hàng:</span>
+                   <span className="font-medium text-slate-800">{transaction.bankInfo.bankName || 'N/A'}</span>
+                 </div>
+                 <div className="flex justify-between">
+                   <span className="text-slate-600">Số tài khoản:</span>
+                   <span className="font-mono text-slate-800">{transaction.bankInfo.accountNumber || 'N/A'}</span>
+                 </div>
+                 <div className="flex justify-between">
+                   <span className="text-slate-600">Chủ tài khoản:</span>
+                   <span className="font-medium text-slate-800">{transaction.bankInfo.accountName || transaction.bankInfo.accountHolder || 'N/A'}</span>
+                 </div>
+                 {transaction.adminNote && (
+                   <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                     <strong>Ghi chú:</strong> {transaction.adminNote}
+                   </div>
+                 )}
+               </div>
+             )}
+          </CardContent>
+        </Card>
+      );
+    }
+
+         // Giao diện mặc định cho các loại giao dịch khác
+     return (
+       <Card 
+         key={transaction._id} 
+         className={`mb-3 sm:mb-4 ${transaction.type === 'deposit' ? 'cursor-pointer hover:shadow-md transition-shadow' : ''}`}
+         onClick={() => transaction.type === 'deposit' && handleTransactionClick(transaction)}
+       >
+         <CardContent className="p-3 sm:p-4">
+           <div className="flex items-center justify-between">
+             <div className="flex items-center space-x-2 sm:space-x-3">
+               <span className="text-xl sm:text-2xl">{getTypeIcon(transaction.type)}</span>
+               <div>
+                 <h3 className="font-semibold text-sm sm:text-base">{transaction.description}</h3>
+                 <p className="text-xs sm:text-sm text-gray-500">{formatDate(transaction.createdAt)}</p>
+                 {transaction.adminNote && (
+                   <p className="text-xs sm:text-sm text-gray-600 mt-1">Ghi chú: {transaction.adminNote}</p>
+                 )}
+               </div>
+             </div>
+                           <div className="text-right">
+                <div className="flex flex-col items-end gap-1">
+                  <div className="flex items-center space-x-1 sm:space-x-2">
+                    {transaction.type === 'trade' && transaction.result === 'win' && (
+                      <span className="text-green-600 font-semibold text-xs sm:text-sm">
+                        +{formatCurrency(transaction.amount + (transaction.profit || 0))}
+                      </span>
+                    )}
+                    {transaction.type === 'trade' && transaction.result === 'lose' && (
+                      <span className="text-red-600 font-semibold text-xs sm:text-sm">
+                        -{formatCurrency(transaction.amount)}
+                      </span>
+                    )}
+                    {transaction.type !== 'trade' && (
+                      <span className={`font-semibold text-xs sm:text-sm ${
+                        transaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
+                      }`}>
+                        {transaction.type === 'deposit' ? '+' : '-'}{formatCurrency(transaction.amount)}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex-shrink-0">
+                    {getStatusBadge(transaction.status, transaction.result || undefined)}
+                  </div>
+                </div>
+               {transaction.type === 'trade' && transaction.result === 'win' && (
+                 <p className="text-xs sm:text-sm text-green-600">
+                   Lợi nhuận: +{formatCurrency(transaction.profit || 0)}
+                 </p>
+               )}
+             </div>
+           </div>
+         </CardContent>
+       </Card>
+     );
+  };
 
   return (
-    <div className="container mx-auto px-4 py-8">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Lịch sử giao dịch</h1>
-        <p className="text-gray-600">Xem lại tất cả các giao dịch của bạn</p>
-        <p className="text-sm text-blue-600 mt-2">💡 Click vào giao dịch nạp/rút tiền để xem tài khoản ngân hàng của bạn</p>
+    <div className="container mx-auto px-2 sm:px-4 py-4 sm:py-8">
+      <div className="mb-4 sm:mb-6">
+        <h1 className="text-2xl sm:text-3xl font-bold mb-2">Lịch sử giao dịch</h1>
+        <p className="text-gray-600 text-sm sm:text-base">Xem lại tất cả các giao dịch của bạn</p>
+        <p className="text-xs sm:text-sm text-blue-600 mt-2">💡 Click vào giao dịch nạp/rút tiền để xem tài khoản ngân hàng của bạn</p>
       </div>
 
-      <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="all">Tất cả</TabsTrigger>
-          <TabsTrigger value="deposits">Nạp tiền</TabsTrigger>
-          <TabsTrigger value="withdrawals">Rút tiền</TabsTrigger>
-          <TabsTrigger value="trades">Giao dịch</TabsTrigger>
-        </TabsList>
+             <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
+         <TabsList className="grid w-full grid-cols-4">
+           <TabsTrigger value="all" className="text-xs sm:text-sm">Tất cả</TabsTrigger>
+           <TabsTrigger value="deposits" className="text-xs sm:text-sm">Nạp tiền</TabsTrigger>
+           <TabsTrigger value="withdrawals" className="text-xs sm:text-sm">Rút tiền</TabsTrigger>
+           <TabsTrigger value="trades" className="text-xs sm:text-sm">Giao dịch</TabsTrigger>
+         </TabsList>
 
-        <TabsContent value={activeTab} className="mt-6">
-          {loading ? (
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
-              <p className="mt-2">Đang tải...</p>
-            </div>
-          ) : transactions.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <p className="text-gray-500">Chưa có giao dịch nào</p>
-              </CardContent>
-            </Card>
-          ) : (
+                 <TabsContent value={activeTab} className="mt-4 sm:mt-6">
+           {loading ? (
+             <div className="text-center py-6 sm:py-8">
+               <div className="animate-spin rounded-full h-6 w-6 sm:h-8 sm:w-8 border-b-2 border-gray-900 mx-auto"></div>
+               <p className="mt-2 text-sm sm:text-base">Đang tải...</p>
+             </div>
+           ) : transactions.length === 0 ? (
+             <Card>
+               <CardContent className="p-6 sm:p-8 text-center">
+                 <p className="text-gray-500 text-sm sm:text-base">Chưa có giao dịch nào</p>
+               </CardContent>
+             </Card>
+           ) : (
             <div>
               {transactions.map(renderTransaction)}
               
-              {/* Phân trang */}
-              {totalPages > 1 && (
-                <div className="flex justify-center space-x-2 mt-6">
-                  <Button
-                    variant="outline"
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
-                  >
-                    Trước
-                  </Button>
-                  <span className="flex items-center px-4">
-                    Trang {page} / {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === totalPages}
-                  >
-                    Sau
-                  </Button>
-                </div>
-              )}
+                             {/* Phân trang */}
+               {totalPages > 1 && (
+                 <div className="flex justify-center space-x-2 mt-4 sm:mt-6">
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setPage(page - 1)}
+                     disabled={page === 1}
+                     className="text-xs sm:text-sm"
+                   >
+                     Trước
+                   </Button>
+                   <span className="flex items-center px-2 sm:px-4 text-xs sm:text-sm">
+                     Trang {page} / {totalPages}
+                   </span>
+                   <Button
+                     variant="outline"
+                     size="sm"
+                     onClick={() => setPage(page + 1)}
+                     disabled={page === totalPages}
+                     className="text-xs sm:text-sm"
+                   >
+                     Sau
+                   </Button>
+                 </div>
+               )}
             </div>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* Bank Details Modal */}
-      <Dialog open={showBankModal} onOpenChange={setShowBankModal}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Thông tin tài khoản ngân hàng</DialogTitle>
-          </DialogHeader>
-          {selectedTransaction && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Loại giao dịch:</label>
-                  <p className="text-sm text-gray-900 capitalize">
-                    {selectedTransaction.type === 'deposit' ? 'Nạp tiền' : 'Rút tiền'}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Ngày tạo:</label>
-                  <p className="text-sm text-gray-900">{formatDate(selectedTransaction.createdAt)}</p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Số tiền:</label>
-                  <p className={`text-sm font-semibold ${
-                    selectedTransaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
-                  }`}>
-                    {selectedTransaction.type === 'deposit' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
-                  </p>
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
-                  <div className="mt-1">
-                    {getStatusBadge(selectedTransaction.status)}
-                  </div>
-                </div>
-              </div>
+             {/* Bank Details Modal */}
+       <Dialog open={showBankModal} onOpenChange={setShowBankModal}>
+         <DialogContent className="sm:max-w-[500px]">
+           <DialogHeader>
+             <DialogTitle className="text-lg sm:text-xl">Thông tin tài khoản ngân hàng</DialogTitle>
+           </DialogHeader>
+                     {selectedTransaction && (
+             <div className="space-y-3 sm:space-y-4">
+               <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                 <div>
+                   <label className="text-xs sm:text-sm font-medium text-gray-700">Loại giao dịch:</label>
+                   <p className="text-xs sm:text-sm text-gray-900 capitalize">
+                     {selectedTransaction.type === 'deposit' ? 'Nạp tiền' : 'Rút tiền'}
+                   </p>
+                 </div>
+                 <div>
+                   <label className="text-xs sm:text-sm font-medium text-gray-700">Ngày tạo:</label>
+                   <p className="text-xs sm:text-sm text-gray-900">{formatDate(selectedTransaction.createdAt)}</p>
+                 </div>
+                 <div>
+                   <label className="text-xs sm:text-sm font-medium text-gray-700">Số tiền:</label>
+                   <p className={`text-xs sm:text-sm font-semibold ${
+                     selectedTransaction.type === 'deposit' ? 'text-green-600' : 'text-red-600'
+                   }`}>
+                     {selectedTransaction.type === 'deposit' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
+                   </p>
+                 </div>
+                 <div>
+                   <label className="text-xs sm:text-sm font-medium text-gray-700">Trạng thái:</label>
+                   <div className="mt-1">
+                     {getStatusBadge(selectedTransaction.status)}
+                   </div>
+                 </div>
+               </div>
               
-              <div className="border-t pt-4">
-                <h4 className="font-medium text-gray-900 mb-3">Tài khoản ngân hàng của bạn:</h4>
-                <div className="space-y-3">
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Tên ngân hàng:</label>
-                    <p className="text-sm text-gray-900">{selectedTransaction.bankInfo?.bankName || 'Chưa cập nhật'}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Số tài khoản:</label>
-                    <p className="text-sm text-gray-900 font-mono">{selectedTransaction.bankInfo?.accountNumber || 'Chưa cập nhật'}</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-gray-700">Chủ tài khoản:</label>
-                    <p className="text-sm text-gray-900">{selectedTransaction.bankInfo?.accountName || selectedTransaction.bankInfo?.accountHolder || 'Chưa cập nhật'}</p>
-                  </div>
-                </div>
-                {(!selectedTransaction.bankInfo?.bankName || !selectedTransaction.bankInfo?.accountNumber) && (
-                  <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <p className="text-sm text-yellow-800">
-                      💡 Bạn chưa cập nhật thông tin ngân hàng. Vui lòng cập nhật trong trang cá nhân để sử dụng tính năng rút tiền.
-                    </p>
-                  </div>
-                )}
-              </div>
+                             <div className="border-t pt-3 sm:pt-4">
+                 <h4 className="font-medium text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Tài khoản ngân hàng của bạn:</h4>
+                 <div className="space-y-2 sm:space-y-3">
+                   <div>
+                     <label className="text-xs sm:text-sm font-medium text-gray-700">Tên ngân hàng:</label>
+                     <p className="text-xs sm:text-sm text-gray-900">{selectedTransaction.bankInfo?.bankName || 'Chưa cập nhật'}</p>
+                   </div>
+                   <div>
+                     <label className="text-xs sm:text-sm font-medium text-gray-700">Số tài khoản:</label>
+                     <p className="text-xs sm:text-sm text-gray-900 font-mono">{selectedTransaction.bankInfo?.accountNumber || 'Chưa cập nhật'}</p>
+                   </div>
+                   <div>
+                     <label className="text-xs sm:text-sm font-medium text-gray-700">Chủ tài khoản:</label>
+                     <p className="text-xs sm:text-sm text-gray-900">{selectedTransaction.bankInfo?.accountName || selectedTransaction.bankInfo?.accountHolder || 'Chưa cập nhật'}</p>
+                   </div>
+                 </div>
+                 {(!selectedTransaction.bankInfo?.bankName || !selectedTransaction.bankInfo?.accountNumber) && (
+                   <div className="mt-2 sm:mt-3 p-2 sm:p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+                     <p className="text-xs sm:text-sm text-yellow-800">
+                       💡 Bạn chưa cập nhật thông tin ngân hàng. Vui lòng cập nhật trong trang cá nhân để sử dụng tính năng rút tiền.
+                     </p>
+                   </div>
+                 )}
+               </div>
 
-              {selectedTransaction.adminNote && (
-                <div className="border-t pt-4">
-                  <label className="text-sm font-medium text-gray-700">Ghi chú:</label>
-                  <p className="text-sm text-gray-900 mt-1">{selectedTransaction.adminNote}</p>
-                </div>
-              )}
+                             {selectedTransaction.adminNote && (
+                 <div className="border-t pt-3 sm:pt-4">
+                   <label className="text-xs sm:text-sm font-medium text-gray-700">Ghi chú:</label>
+                   <p className="text-xs sm:text-sm text-gray-900 mt-1">{selectedTransaction.adminNote}</p>
+                 </div>
+               )}
 
-              <div className="flex justify-end pt-4">
-                <Button onClick={() => setShowBankModal(false)}>
-                  Đóng
-                </Button>
-              </div>
+               <div className="flex justify-end pt-3 sm:pt-4">
+                 <Button size="sm" onClick={() => setShowBankModal(false)} className="text-xs sm:text-sm">
+                   Đóng
+                 </Button>
+               </div>
             </div>
           )}
         </DialogContent>

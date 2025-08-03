@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '../../../../components/ui/separator';
-import { Wallet, ArrowDownRight, Building2, AlertCircle, History } from 'lucide-react';
+import { Wallet, ArrowDownRight, Building2, AlertCircle } from 'lucide-react';
 import useSWR from 'swr';
 
 export default function WithdrawPage() {
@@ -20,9 +20,6 @@ export default function WithdrawPage() {
   const { toast } = useToast();
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [withdrawalPage, setWithdrawalPage] = useState(1);
-  const [withdrawalTotalPages, setWithdrawalTotalPages] = useState(1);
-  const [expandedWithdrawals, setExpandedWithdrawals] = useState<Set<string>>(new Set());
 
   // Lấy thông tin balance
   const { data: balanceData, error: balanceError, mutate: refreshBalance } = useSWR(
@@ -36,11 +33,7 @@ export default function WithdrawPage() {
     url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
   );
 
-  // Lấy lịch sử rút tiền
-  const { data: withdrawalHistory, error: historyError, mutate: refreshHistory } = useSWR(
-    token ? `/api/withdrawals/history?page=${withdrawalPage}&limit=5` : null,
-    url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
-  );
+
 
   const availableBalance = balanceData?.balance?.available || 0;
   const WITHDRAWAL_FEE = 0.04; // 4% phí rút tiền
@@ -137,8 +130,6 @@ export default function WithdrawPage() {
         
                  // Refresh balance data
          refreshBalance();
-         // Refresh withdrawal history
-         refreshHistory();
       } else {
         toast({ variant: 'destructive', title: 'Lỗi', description: result.message || 'Không thể gửi yêu cầu rút tiền' });
       }
@@ -149,59 +140,7 @@ export default function WithdrawPage() {
     }
      };
 
-   // Hàm helper để format trạng thái
-   const getStatusBadge = (status: string) => {
-     switch (status) {
-       case 'Chờ duyệt':
-         return <span className="font-bold text-yellow-600 text-xs">⏳ Chờ duyệt</span>;
-       case 'Đã duyệt':
-         return <span className="font-bold text-green-600 text-xs">✅ Đã duyệt</span>;
-       case 'Từ chối':
-         return <span className="font-bold text-red-600 text-xs">❌ Từ chối</span>;
-       case 'Hoàn thành':
-         return <span className="font-bold text-blue-600 text-xs">✅ Hoàn thành</span>;
-       case 'Đang xử lý':
-         return <span className="font-bold text-purple-600 text-xs">🔄 Đang xử lý</span>;
-       default:
-         return <span className="font-bold text-gray-600 text-xs">{status}</span>;
-     }
-   };
 
-   // Hàm helper để format ngày tháng
-   const formatDate = (dateString: string) => {
-     return new Date(dateString).toLocaleDateString('vi-VN', {
-       year: 'numeric',
-       month: '2-digit',
-       day: '2-digit',
-       hour: '2-digit',
-       minute: '2-digit'
-     });
-   };
-
-   // Cập nhật tổng số trang khi có dữ liệu
-   useEffect(() => {
-     if (withdrawalHistory?.totalPages) {
-       setWithdrawalTotalPages(withdrawalHistory.totalPages);
-     }
-   }, [withdrawalHistory]);
-
-   // Hàm xử lý chuyển trang
-   const handlePageChange = (newPage: number) => {
-     setWithdrawalPage(newPage);
-   };
-
-   // Toggle hiển thị thông tin ngân hàng
-   const toggleBankInfo = (withdrawalId: string) => {
-     setExpandedWithdrawals(prev => {
-       const newSet = new Set(prev);
-       if (newSet.has(withdrawalId)) {
-         newSet.delete(withdrawalId);
-       } else {
-         newSet.add(withdrawalId);
-       }
-       return newSet;
-     });
-   };
 
    if (isLoading || !user) {
     return <div className="flex justify-center items-center h-screen text-white">Loading...</div>;
@@ -363,105 +302,7 @@ export default function WithdrawPage() {
                  </CardContent>
                </Card>
 
-               {/* Lịch sử rút tiền */}
-               <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
-                 <CardHeader className="pb-3">
-                   <CardTitle className="flex items-center gap-2 text-base">
-                     <History className="h-4 w-4 text-purple-600" />
-                     Lịch sử rút tiền
-                   </CardTitle>
-                 </CardHeader>
-                 <CardContent>
-                   {withdrawalHistory?.withdrawals && withdrawalHistory.withdrawals.length > 0 ? (
-                     <div className="space-y-3">
-                       {withdrawalHistory.withdrawals.map((withdrawal: any) => (
-                         <div key={withdrawal._id} className="bg-gradient-to-r from-slate-50 to-gray-50 p-3 sm:p-4 rounded-xl border border-slate-200">
-                           <div className="flex justify-between items-start mb-2">
-                             <div className="flex items-center gap-2 flex-wrap">
-                               <span className="font-semibold text-slate-800 text-sm sm:text-base">
-                                 {withdrawal.amount?.toLocaleString()} VND
-                               </span>
-                               {getStatusBadge(withdrawal.status)}
-                             </div>
-                             <div className="flex items-center gap-2">
-                               <span className="text-xs text-slate-500 flex-shrink-0">
-                                 {formatDate(withdrawal.createdAt)}
-                               </span>
-                               <Button
-                                 variant="ghost"
-                                 size="sm"
-                                 onClick={() => toggleBankInfo(withdrawal._id)}
-                                 className="h-6 w-6 p-0 hover:bg-slate-200 text-slate-600"
-                               >
-                                 {expandedWithdrawals.has(withdrawal._id) ? (
-                                   <span className="text-lg font-bold">−</span>
-                                 ) : (
-                                   <span className="text-lg font-bold">+</span>
-                                 )}
-                               </Button>
-                             </div>
-                           </div>
-                           
-                           {/* Thông tin ngân hàng - chỉ hiển thị khi expanded */}
-                           {expandedWithdrawals.has(withdrawal._id) && (
-                             <div className="space-y-1 text-xs sm:text-sm border-t border-slate-200 pt-2 mt-2">
-                               <div className="flex justify-between">
-                                 <span className="text-slate-600">Ngân hàng:</span>
-                                 <span className="font-medium text-slate-800">{user?.bank?.name || 'N/A'}</span>
-                               </div>
-                               <div className="flex justify-between">
-                                 <span className="text-slate-600">Số tài khoản:</span>
-                                 <span className="font-mono text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
-                               </div>
-                               <div className="flex justify-between">
-                                 <span className="text-slate-600">Chủ tài khoản:</span>
-                                 <span className="font-medium text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
-                               </div>
-                               {withdrawal.note && (
-                                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                                   <strong>Ghi chú:</strong> {withdrawal.note}
-                                 </div>
-                               )}
-                             </div>
-                           )}
-                         </div>
-                       ))}
-                       
-                       {/* Phân trang */}
-                       {withdrawalTotalPages > 1 && (
-                         <div className="flex justify-center space-x-2 pt-4">
-                           <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={() => handlePageChange(withdrawalPage - 1)}
-                             disabled={withdrawalPage === 1}
-                             className="text-blue-600 border-blue-300 hover:bg-blue-50 text-xs sm:text-sm"
-                           >
-                             Trước
-                           </Button>
-                           <span className="flex items-center px-2 sm:px-3 text-xs sm:text-sm text-slate-600">
-                             Trang {withdrawalPage} / {withdrawalTotalPages}
-                           </span>
-                           <Button
-                             variant="outline"
-                             size="sm"
-                             onClick={() => handlePageChange(withdrawalPage + 1)}
-                             disabled={withdrawalPage === withdrawalTotalPages}
-                             className="text-blue-600 border-blue-300 hover:bg-blue-50 text-xs sm:text-sm"
-                           >
-                             Sau
-                           </Button>
-                         </div>
-                       )}
-                     </div>
-                   ) : (
-                     <div className="text-center py-6 sm:py-8">
-                       <History className="h-10 w-10 sm:h-12 sm:w-12 text-slate-400 mx-auto mb-3" />
-                       <p className="text-slate-500 text-xs sm:text-sm">Chưa có lịch sử rút tiền</p>
-                     </div>
-                   )}
-                 </CardContent>
-               </Card>
+
              </>
            )}
         </div>

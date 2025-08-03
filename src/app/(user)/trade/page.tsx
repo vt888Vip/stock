@@ -927,7 +927,7 @@ export default function TradePage() {
               </Card>
 
                              {/* Advanced Chart */}
-               <Card className="bg-white border-gray-500 rounded-md shadow h-[400px]">
+               <Card className="bg-white border-gray-500 rounded-md shadow h-[350px]">
                  <CardContent className="p-2 h-full">
                    <TradingViewAdvancedChart 
                      key={chartSymbol} 
@@ -951,23 +951,23 @@ export default function TradePage() {
               </CardHeader>
                              <CardContent>
                  {/* Hiển thị số dư */}
-                 <div className="mb-4 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                 <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                    <div className="flex items-center justify-between text-blue-900">
                      <span className="font-semibold text-sm">SỐ DƯ:</span>
                      <span className="text-base font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
                    </div>
                  </div>
                  
-                 <div className="mb-4">
+                 <div className="mb-3">
                    <div className="flex justify-between items-center mb-2">
                      <label htmlFor="amount-mobile" className="text-sm text-gray-400">
                        Số tiền (VND)
                      </label>
                      <span className="text-xs text-gray-400">Tối thiểu: {formatCurrency(100000)}</span>
                    </div>
-                  <div className="flex items-center space-x-2">
-                    <Button variant="outline" size="icon" onClick={() => addAmount(-100000)}>
-                      <Minus className="h-4 w-4" />
+                  <div className="flex items-center space-x-1">
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => addAmount(-100000)}>
+                      <Minus className="h-3 w-3" />
                     </Button>
                     <Input
                       id="amount-mobile"
@@ -980,18 +980,18 @@ export default function TradePage() {
                       placeholder="Nhập số tiền"
                       suppressHydrationWarning
                     />
-                    <Button variant="outline" size="icon" onClick={() => addAmount(100000)}>
-                      <Plus className="h-4 w-4" />
+                    <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => addAmount(100000)}>
+                      <Plus className="h-3 w-3" />
                     </Button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 mt-2">
+                  <div className="grid grid-cols-4 gap-1 mt-2">
                     {QUICK_AMOUNTS.map((value) => (
                       <Button
                         key={value}
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="text-sm font-semibold bg-white hover:bg-gray-100"
+                        className="text-xs font-semibold bg-white hover:bg-gray-100 h-8"
                         onClick={() => addAmount(value)}
                       >
                         {value >= 1000000 ? `+${value / 1000000}M` : `+${value / 1000}K`}

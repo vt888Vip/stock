@@ -57,16 +57,16 @@ export default function LiquidityTable() {
 
   return (
     <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-300 text-sm text-left text-gray-900">
+      <table className="min-w-full divide-y divide-gray-300 text-xs sm:text-sm text-left text-gray-900">
         <thead className="bg-gray-100 uppercase text-gray-600">
           <tr>
-            <th scope="col" className="px-4 py-2 font-medium">
+            <th scope="col" className="px-2 sm:px-4 py-1.5 sm:py-2 font-medium text-xs sm:text-sm">
               Cặp giao dịch
             </th>
-            <th scope="col" className="px-4 py-2 font-medium">
+            <th scope="col" className="px-2 sm:px-4 py-1.5 sm:py-2 font-medium text-xs sm:text-sm">
               Loại
             </th>
-            <th scope="col" className="px-4 py-2 font-medium">
+            <th scope="col" className="px-2 sm:px-4 py-1.5 sm:py-2 font-medium text-xs sm:text-sm">
               Số lượng
             </th>
           </tr>
@@ -82,13 +82,13 @@ export default function LiquidityTable() {
                 transition={{ duration: 0.3 }}
                 className="border-b border-gray-200"
               >
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm">
                   {row.pair}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm">
                   {row.type}
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap">
+                <td className="px-2 sm:px-4 py-2 sm:py-3 whitespace-nowrap text-xs sm:text-sm">
                   {formatCurrency(row.quantity)}
                 </td>
               </motion.tr>

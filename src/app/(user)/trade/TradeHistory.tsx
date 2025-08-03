@@ -175,12 +175,12 @@ const TradeHistory: React.FC<TradeHistoryProps> = ({ tradeHistory, formatCurrenc
 
             {/* Mobile Card View */}
             <div className="md:hidden">
-              <div className="space-y-3 p-4">
+              <div className="space-y-2 p-3">
                 {tradeHistory.slice(0, 5).map((trade) => (
-                  <div key={trade.id} className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center space-x-2">
-                        <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium ${getDirectionColor(trade.direction)} bg-opacity-10 ${trade.direction === 'UP' ? 'bg-green-100' : 'bg-red-100'}`}>
+                  <div key={trade.id} className="bg-gray-50 rounded-lg p-3 border border-gray-200">
+                    <div className="flex items-center justify-between mb-1.5">
+                      <div className="flex items-center space-x-1.5">
+                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium ${getDirectionColor(trade.direction)} bg-opacity-10 ${trade.direction === 'UP' ? 'bg-green-100' : 'bg-red-100'}`}>
                           {getDirectionText(trade.direction)}
                         </span>
                         <span className="text-xs text-gray-500 font-mono">
@@ -196,10 +196,10 @@ const TradeHistory: React.FC<TradeHistoryProps> = ({ tradeHistory, formatCurrenc
                     </div>
                     
                     <div className="flex items-center justify-between">
-                      <div className="text-sm text-gray-600">
+                      <div className="text-xs text-gray-600">
                         {formatCurrency(trade.amount)}
                       </div>
-                      <div className="text-sm">
+                      <div className="text-xs">
                         {trade.result === 'win' ? (
                           <span className="text-green-600 font-bold">
                             +{formatCurrency(trade.profit)}
