@@ -15,9 +15,16 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   const { isAuthenticated, isLoading } = useAuth();
 
   React.useEffect(() => {
-    // Nếu đã đăng nhập thì chuyển hướng về trang chủ
+    // Nếu đã đăng nhập thì chuyển hướng trực tiếp đến trang trade
     if (!isLoading && isAuthenticated()) {
-      router.push('/');
+      // Kiểm tra flag preventRedirect để tránh redirect trong quá trình login
+      const preventRedirect = localStorage.getItem('preventRedirect')
+      if (preventRedirect === 'true') {
+        return
+      }
+      
+      // Redirect trực tiếp đến trang trade thay vì trang chủ
+      router.push('/trade');
     }
   }, [isLoading, isAuthenticated, router]);
 

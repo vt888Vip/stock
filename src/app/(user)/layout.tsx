@@ -22,12 +22,24 @@ export default function TradeLayout({ children }: { children: React.ReactNode })
   useEffect(() => {
     // Chỉ redirect khi đã load xong và không authenticated
     if (!isLoading && !isAuthenticated()) {
-      // Thêm delay nhỏ để đảm bảo authentication state đã được cập nhật
+      // Thêm delay lớn hơn để đảm bảo authentication state đã được cập nhật hoàn toàn
       const timeoutId = setTimeout(() => {
+        // Double check authentication state
         if (!isAuthenticated()) {
-          router.push('/login');
+          // Kiểm tra flag preventRedirect
+          const preventRedirect = localStorage.getItem('preventRedirect')
+          if (preventRedirect === 'true') {
+            // Nếu có flag preventRedirect, không redirect
+            return
+          }
+          
+          // Chỉ redirect nếu thực sự không authenticated và không phải đang trong quá trình login
+          const currentPath = window.location.pathname;
+          if (!currentPath.includes('/login') && !currentPath.includes('/register')) {
+            router.push('/login');
+          }
         }
-      }, 100);
+      }, 500); // Tăng delay lên 500ms
       
       return () => clearTimeout(timeoutId);
     }

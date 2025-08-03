@@ -22,6 +22,7 @@ export default function WithdrawPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [withdrawalPage, setWithdrawalPage] = useState(1);
   const [withdrawalTotalPages, setWithdrawalTotalPages] = useState(1);
+  const [expandedWithdrawals, setExpandedWithdrawals] = useState<Set<string>>(new Set());
 
   // Lấy thông tin balance
   const { data: balanceData, error: balanceError, mutate: refreshBalance } = useSWR(
@@ -187,6 +188,19 @@ export default function WithdrawPage() {
    // Hàm xử lý chuyển trang
    const handlePageChange = (newPage: number) => {
      setWithdrawalPage(newPage);
+   };
+
+   // Toggle hiển thị thông tin ngân hàng
+   const toggleBankInfo = (withdrawalId: string) => {
+     setExpandedWithdrawals(prev => {
+       const newSet = new Set(prev);
+       if (newSet.has(withdrawalId)) {
+         newSet.delete(withdrawalId);
+       } else {
+         newSet.add(withdrawalId);
+       }
+       return newSet;
+     });
    };
 
    if (isLoading || !user) {
@@ -369,30 +383,47 @@ export default function WithdrawPage() {
                                </span>
                                {getStatusBadge(withdrawal.status)}
                              </div>
-                             <span className="text-xs text-slate-500 flex-shrink-0">
-                               {formatDate(withdrawal.createdAt)}
-                             </span>
+                             <div className="flex items-center gap-2">
+                               <span className="text-xs text-slate-500 flex-shrink-0">
+                                 {formatDate(withdrawal.createdAt)}
+                               </span>
+                               <Button
+                                 variant="ghost"
+                                 size="sm"
+                                 onClick={() => toggleBankInfo(withdrawal._id)}
+                                 className="h-6 w-6 p-0 hover:bg-slate-200 text-slate-600"
+                               >
+                                 {expandedWithdrawals.has(withdrawal._id) ? (
+                                   <span className="text-lg font-bold">−</span>
+                                 ) : (
+                                   <span className="text-lg font-bold">+</span>
+                                 )}
+                               </Button>
+                             </div>
                            </div>
                            
-                           <div className="space-y-1 text-xs sm:text-sm">
-                             <div className="flex justify-between">
-                               <span className="text-slate-600">Ngân hàng:</span>
-                               <span className="font-medium text-slate-800">{user?.bank?.name || 'N/A'}</span>
-                             </div>
-                             <div className="flex justify-between">
-                               <span className="text-slate-600">Số tài khoản:</span>
-                               <span className="font-mono text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
-                             </div>
-                             <div className="flex justify-between">
-                               <span className="text-slate-600">Chủ tài khoản:</span>
-                               <span className="font-medium text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
-                             </div>
-                             {withdrawal.note && (
-                               <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                                 <strong>Ghi chú:</strong> {withdrawal.note}
+                           {/* Thông tin ngân hàng - chỉ hiển thị khi expanded */}
+                           {expandedWithdrawals.has(withdrawal._id) && (
+                             <div className="space-y-1 text-xs sm:text-sm border-t border-slate-200 pt-2 mt-2">
+                               <div className="flex justify-between">
+                                 <span className="text-slate-600">Ngân hàng:</span>
+                                 <span className="font-medium text-slate-800">{user?.bank?.name || 'N/A'}</span>
                                </div>
-                             )}
-                           </div>
+                               <div className="flex justify-between">
+                                 <span className="text-slate-600">Số tài khoản:</span>
+                                 <span className="font-mono text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
+                               </div>
+                               <div className="flex justify-between">
+                                 <span className="text-slate-600">Chủ tài khoản:</span>
+                                 <span className="font-medium text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
+                               </div>
+                               {withdrawal.note && (
+                                 <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                                   <strong>Ghi chú:</strong> {withdrawal.note}
+                                 </div>
+                               )}
+                             </div>
+                           )}
                          </div>
                        ))}
                        

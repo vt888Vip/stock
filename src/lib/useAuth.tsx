@@ -220,6 +220,10 @@ function useAuthStandalone(): AuthContextType {
                 balance: meData.user.balance || { available: 0, frozen: 0 }
               };
               setUser(userData);
+              
+              // Đảm bảo state đã được cập nhật trước khi return
+              await new Promise(resolve => setTimeout(resolve, 100));
+              
               return { success: true, message: 'Đăng nhập thành công' };
             }
           }

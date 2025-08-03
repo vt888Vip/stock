@@ -30,20 +30,28 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [isAutoLogin, setIsAutoLogin] = useState(false)
   const [isRedirecting, setIsRedirecting] = useState(false)
+  const [preventAutoRedirect, setPreventAutoRedirect] = useState(false)
 
   const router = useRouter()
   const { isAuthenticated, isAdmin, refreshUser } = useAuth()
 
   // Redirect if already authenticated
   useEffect(() => {
-    if (isAuthenticated()) {
+    // Chỉ redirect nếu đã authenticated và không đang trong quá trình đăng ký
+    if (isAuthenticated() && !isLoading && !isAutoLogin && !isRedirecting && !preventAutoRedirect) {
+      // Kiểm tra flag preventRedirect
+      const preventRedirect = localStorage.getItem('preventRedirect')
+      if (preventRedirect === 'true') {
+        return
+      }
+      
       if (isAdmin()) {
         router.push("/admin")
       } else {
         router.push("/trade")
       }
     }
-  }, [isAuthenticated, isAdmin, router])
+  }, [isAuthenticated, isAdmin, router, isLoading, isAutoLogin, isRedirecting, preventAutoRedirect])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target
@@ -76,6 +84,13 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Ngăn chặn auto redirect trong quá trình đăng ký
+    setPreventAutoRedirect(true)
+    
+    // Set flag để ngăn chặn redirect không mong muốn
+    localStorage.setItem('preventRedirect', 'true')
+    
     setError("")
     setSuccess("")
 
@@ -143,8 +158,9 @@ export default function RegisterPage() {
             await refreshUser()
             
             // Chuyển hướng mượt mà
+            localStorage.removeItem('preventRedirect')
             setTimeout(() => {
-              router.push("/trade")
+              window.location.replace("/trade")
             }, 1000)
           } else {
             throw new Error("Đăng nhập tự động thất bại")
@@ -158,10 +174,14 @@ export default function RegisterPage() {
         }
       } else {
         setError(data.message || "Đăng ký thất bại")
+        // Clear flag khi có lỗi
+        localStorage.removeItem('preventRedirect')
       }
     } catch (error: any) {
       console.error("Registration error:", error)
       setError("Đã xảy ra lỗi khi đăng ký. Vui lòng thử lại sau.")
+      // Clear flag khi có lỗi
+      localStorage.removeItem('preventRedirect')
     } finally {
       setIsLoading(false)
     }
