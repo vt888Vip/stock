@@ -151,16 +151,18 @@ export default function WithdrawPage() {
    // Hàm helper để format trạng thái
    const getStatusBadge = (status: string) => {
      switch (status) {
-       case 'pending':
-         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Đang chờ</Badge>;
-       case 'approved':
-         return <Badge variant="secondary" className="bg-green-100 text-green-800">Đã duyệt</Badge>;
-       case 'rejected':
-         return <Badge variant="secondary" className="bg-red-100 text-red-800">Từ chối</Badge>;
-       case 'completed':
-         return <Badge variant="secondary" className="bg-blue-100 text-blue-800">Hoàn thành</Badge>;
+       case 'Chờ duyệt':
+         return <span className="font-bold text-yellow-600 text-xs">⏳ Chờ duyệt</span>;
+       case 'Đã duyệt':
+         return <span className="font-bold text-green-600 text-xs">✅ Đã duyệt</span>;
+       case 'Từ chối':
+         return <span className="font-bold text-red-600 text-xs">❌ Từ chối</span>;
+       case 'Hoàn thành':
+         return <span className="font-bold text-blue-600 text-xs">✅ Hoàn thành</span>;
+       case 'Đang xử lý':
+         return <span className="font-bold text-purple-600 text-xs">🔄 Đang xử lý</span>;
        default:
-         return <Badge variant="secondary" className="bg-gray-100 text-gray-800">{status}</Badge>;
+         return <span className="font-bold text-gray-600 text-xs">{status}</span>;
      }
    };
 
@@ -361,13 +363,13 @@ export default function WithdrawPage() {
                        {withdrawalHistory.withdrawals.map((withdrawal: any) => (
                          <div key={withdrawal._id} className="bg-gradient-to-r from-slate-50 to-gray-50 p-3 sm:p-4 rounded-xl border border-slate-200">
                            <div className="flex justify-between items-start mb-2">
-                             <div className="flex items-center gap-2">
+                             <div className="flex items-center gap-2 flex-wrap">
                                <span className="font-semibold text-slate-800 text-sm sm:text-base">
                                  {withdrawal.amount?.toLocaleString()} VND
                                </span>
                                {getStatusBadge(withdrawal.status)}
                              </div>
-                             <span className="text-xs text-slate-500">
+                             <span className="text-xs text-slate-500 flex-shrink-0">
                                {formatDate(withdrawal.createdAt)}
                              </span>
                            </div>
@@ -375,11 +377,15 @@ export default function WithdrawPage() {
                            <div className="space-y-1 text-xs sm:text-sm">
                              <div className="flex justify-between">
                                <span className="text-slate-600">Ngân hàng:</span>
-                               <span className="font-medium text-slate-800">{withdrawal.bankName || 'N/A'}</span>
+                               <span className="font-medium text-slate-800">{user?.bank?.name || 'N/A'}</span>
                              </div>
                              <div className="flex justify-between">
                                <span className="text-slate-600">Số tài khoản:</span>
-                               <span className="font-mono text-slate-800">{withdrawal.accountNumber || 'N/A'}</span>
+                               <span className="font-mono text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
+                             </div>
+                             <div className="flex justify-between">
+                               <span className="text-slate-600">Chủ tài khoản:</span>
+                               <span className="font-medium text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
                              </div>
                              {withdrawal.note && (
                                <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">

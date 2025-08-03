@@ -23,6 +23,8 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
+  const [successMessage, setSuccessMessage] = useState("")
 
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -36,10 +38,11 @@ export default function LoginPage() {
       if (isAdmin()) {
         router.push("/admin")
       } else {
-        router.push(callbackUrl)
+        // User thường sẽ được chuyển đến trang trade
+        router.push("/trade")
       }
     }
-  }, [isAuthenticated, isAdmin, router, callbackUrl])
+  }, [isAuthenticated, isAdmin, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,42 +75,58 @@ export default function LoginPage() {
         try {
           localStorage.setItem('loginTimestamp', Date.now().toString());
           localStorage.setItem('isLoggedIn', 'true');
-          localStorage.setItem('redirectAfterLogin', callbackUrl);
+          // Lưu redirect URL mặc định là /trade cho user thường
+          localStorage.setItem('redirectAfterLogin', '/trade');
           const loginResult = result as { success: boolean; message?: string; token?: string };
           if (loginResult.token) {
             localStorage.setItem('token', loginResult.token);
             localStorage.setItem('authToken', loginResult.token);
             document.cookie = `token=${loginResult.token}; path=/; max-age=604800`;
           }
-          setError("Đăng nhập thành công! Đang chuyển hướng...");
+          
+          // Hiển thị thông báo thành công
+          setSuccessMessage("✅ Đăng nhập thành công!")
+          setIsLoading(false)
+          setIsRedirecting(true)
 
-          // Auto-dismiss success message after 1 second
-          setTimeout(() => {
-            setError("");
-          }, 1000);
+          // Delay ngắn để user thấy thông báo thành công
+          await new Promise(resolve => setTimeout(resolve, 800))
 
           // Lấy lại thông tin user để kiểm tra role
-          setTimeout(async () => {
-            try {
-              const res = await fetch('/api/auth/me', {
-                headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (data?.user?.role === 'admin') {
-                  window.location.replace('/admin');
-                } else {
-                  window.location.replace(callbackUrl);
-                }
+          try {
+            const res = await fetch('/api/auth/me', {
+              headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+            });
+            if (res.ok) {
+              const data = await res.json();
+              if (data?.user?.role === 'admin') {
+                setSuccessMessage("🎉 Chào mừng Admin! Đang chuyển hướng...")
+                setTimeout(() => {
+                  router.push('/admin');
+                }, 1000);
               } else {
-                window.location.replace(callbackUrl);
+                setSuccessMessage("🎉 Chào mừng! Đang chuyển hướng đến trang giao dịch...")
+                setTimeout(() => {
+                  router.push('/trade');
+                }, 1000);
               }
-            } catch (e) {
-              window.location.replace(callbackUrl);
+            } else {
+              // Fallback: chuyển đến trang trade
+              setSuccessMessage("🎉 Đăng nhập thành công! Đang chuyển hướng...")
+              setTimeout(() => {
+                router.push('/trade');
+              }, 1000);
             }
-          }, 1000);
+          } catch (e) {
+            // Fallback: chuyển đến trang trade
+            setSuccessMessage("🎉 Đăng nhập thành công! Đang chuyển hướng...")
+            setTimeout(() => {
+              router.push('/trade');
+            }, 1000);
+          }
         } catch (err) {
           console.error('Error saving to localStorage:', err);
+          setError("Có lỗi xảy ra khi lưu thông tin đăng nhập")
         }
       } else {
         console.error('Login failed:', result?.message || 'No error message')
@@ -151,6 +170,19 @@ export default function LoginPage() {
             </Alert>
           )}
 
+          {successMessage && (
+            <Alert className="mb-4 border-green-200 bg-green-50">
+              <AlertDescription className="flex items-center text-green-800">
+                {successMessage}
+                {successMessage.includes('Đang chuyển hướng') && (
+                  <div className="ml-2">
+                    <Loader2 className="h-4 w-4 animate-spin inline-block" />
+                  </div>
+                )}
+              </AlertDescription>
+            </Alert>
+          )}
+
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Tên đăng nhập</Label>
@@ -162,7 +194,8 @@ export default function LoginPage() {
                 required
                 minLength={3}
                 placeholder="Nhập tên đăng nhập"
-                disabled={isLoading}
+                disabled={isLoading || isRedirecting}
+                className="transition-all duration-200"
               />
             </div>
 
@@ -177,7 +210,8 @@ export default function LoginPage() {
                   required
                   minLength={6}
                   placeholder="Nhập mật khẩu"
-                  disabled={isLoading}
+                  disabled={isLoading || isRedirecting}
+                  className="transition-all duration-200"
                 />
                 <Button
                   type="button"
@@ -185,18 +219,27 @@ export default function LoginPage() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
+                  disabled={isLoading || isRedirecting}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full transition-all duration-200" 
+              disabled={isLoading || isRedirecting}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Đang đăng nhập...
+                </>
+              ) : isRedirecting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang chuyển hướng...
                 </>
               ) : (
                 "Đăng nhập"

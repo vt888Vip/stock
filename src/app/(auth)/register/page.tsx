@@ -28,9 +28,11 @@ export default function RegisterPage() {
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [isAutoLogin, setIsAutoLogin] = useState(false)
+  const [isRedirecting, setIsRedirecting] = useState(false)
 
   const router = useRouter()
-  const { isAuthenticated, isAdmin } = useAuth()
+  const { isAuthenticated, isAdmin, refreshUser } = useAuth()
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function RegisterPage() {
       if (isAdmin()) {
         router.push("/admin")
       } else {
-        router.push("/")
+        router.push("/trade")
       }
     }
   }, [isAuthenticated, isAdmin, router])
@@ -98,8 +100,8 @@ export default function RegisterPage() {
       const data = await response.json()
 
       if (data.success) {
-        setSuccess("Đăng ký thành công! Đang chuyển hướng đến trang đăng nhập...")
-
+        setSuccess("✅ Đăng ký thành công!")
+        
         // Reset form
         setFormData({
           username: "",
@@ -107,10 +109,53 @@ export default function RegisterPage() {
           confirmPassword: "",
         })
 
-        // Redirect to login page after 2 seconds
-        setTimeout(() => {
-          router.push("/login")
-        }, 2000)
+        // Bắt đầu quá trình đăng nhập tự động
+        setIsAutoLogin(true)
+        setSuccess("✅ Đăng ký thành công! Đang đăng nhập tự động...")
+
+        // Delay ngắn để user thấy thông báo
+        await new Promise(resolve => setTimeout(resolve, 800))
+
+        try {
+          const loginResponse = await fetch("/api/login", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              username: formData.username.trim(),
+              password: formData.password,
+            }),
+          })
+
+          const loginData = await loginResponse.json()
+
+          if (loginData.success && loginData.token) {
+            // Lưu token vào localStorage
+            localStorage.setItem('authToken', loginData.token)
+            localStorage.setItem('token', loginData.token)
+            
+            setSuccess("🎉 Đăng ký và đăng nhập thành công!")
+            setIsAutoLogin(false)
+            setIsRedirecting(true)
+            
+            // Cập nhật authentication state
+            await refreshUser()
+            
+            // Chuyển hướng mượt mà
+            setTimeout(() => {
+              router.push("/trade")
+            }, 1000)
+          } else {
+            throw new Error("Đăng nhập tự động thất bại")
+          }
+        } catch (loginError) {
+          setIsAutoLogin(false)
+          setSuccess("✅ Đăng ký thành công! Vui lòng đăng nhập để tiếp tục.")
+          setTimeout(() => {
+            router.push("/login")
+          }, 2000)
+        }
       } else {
         setError(data.message || "Đăng ký thất bại")
       }
@@ -146,7 +191,7 @@ export default function RegisterPage() {
           )}
 
           {success && (
-            <Alert className="mb-4 border-green-200 bg-green-50">
+            <Alert className={`mb-4 border-green-200 bg-green-50 transition-all duration-300 ${isRedirecting ? 'animate-pulse' : ''}`}>
               <CheckCircle className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">{success}</AlertDescription>
             </Alert>
@@ -164,7 +209,8 @@ export default function RegisterPage() {
                 required
                 minLength={3}
                 placeholder="Nhập tên đăng nhập (ít nhất 3 ký tự)"
-                disabled={isLoading}
+                disabled={isLoading || isAutoLogin || isRedirecting}
+                className="transition-all duration-200"
               />
             </div>
 
@@ -180,7 +226,8 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   placeholder="Nhập mật khẩu (ít nhất 6 ký tự)"
-                  disabled={isLoading}
+                  disabled={isLoading || isAutoLogin || isRedirecting}
+                  className="transition-all duration-200"
                 />
                 <Button
                   type="button"
@@ -188,7 +235,7 @@ export default function RegisterPage() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowPassword(!showPassword)}
-                  disabled={isLoading}
+                  disabled={isLoading || isAutoLogin || isRedirecting}
                 >
                   {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
@@ -207,7 +254,8 @@ export default function RegisterPage() {
                   required
                   minLength={6}
                   placeholder="Nhập lại mật khẩu"
-                  disabled={isLoading}
+                  disabled={isLoading || isAutoLogin || isRedirecting}
+                  className="transition-all duration-200"
                 />
                 <Button
                   type="button"
@@ -215,18 +263,32 @@ export default function RegisterPage() {
                   size="sm"
                   className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  disabled={isLoading}
+                  disabled={isLoading || isAutoLogin || isRedirecting}
                 >
                   {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
               </div>
             </div>
 
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button 
+              type="submit" 
+              className="w-full transition-all duration-200" 
+              disabled={isLoading || isAutoLogin || isRedirecting}
+            >
               {isLoading ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   Đang đăng ký...
+                </>
+              ) : isAutoLogin ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang đăng nhập tự động...
+                </>
+              ) : isRedirecting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Đang chuyển hướng...
                 </>
               ) : (
                 "Đăng ký"

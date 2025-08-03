@@ -7,17 +7,19 @@ interface TradingViewAdvancedChartProps {
   height?: number | string;
   interactive?: boolean; // if false, disable user interaction
   style?: number; // 1 = Candles, 3 = Line, etc.
+  onSymbolChange?: (symbol: string) => void; // Callback khi symbol thay đổi
 }
 
 // Embeds TradingView Advanced Chart widget using external script
 // Docs: https://www.tradingview.com/widget/advanced-chart/
 export default function TradingViewAdvancedChart({
-  symbol = 'TVC:GOLD', // Mặc định là biểu đồ vàng
-  interval = '15',
+  symbol = 'TVC:GOLD', // Quay lại symbol gốc vì nó hoạt động
+  interval = '1',
   theme = 'dark',
   height = '100%',
   style = 1,
   interactive = true,
+  onSymbolChange,
 }: TradingViewAdvancedChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -38,33 +40,19 @@ export default function TradingViewAdvancedChart({
       interval,
       symbol,
       timezone: 'Etc/UTC',
-      allow_symbol_change: false,
-      hide_side_toolbar: interactive ? false : true,
+      allow_symbol_change: true, // Cho phép thay đổi symbol
+      hide_side_toolbar: false,
       hide_volume: false,
       hide_legend: false,
       locale: 'en',
-      disabled_features: interactive ? [] : [
-        "header_widget",
-        "header_symbol_search",
-        "header_compare",
-        "header_indicators",
-        "header_settings",
-        "header_fullscreen_button",
-        "header_chart_type",
-        "header_interval_dialog_button",
-        "header_undo_redo",
-        "header_screenshot",
-        "timeframes_toolbar",
-        "left_toolbar",
-        "edit_buttons_in_legend",
-        "use_localstorage_for_settings",
-        "chart_zoom",
-        "chart_pan",
-        "mousewheel_zoom",
-      ],
       style,
       withdateranges: false,
       hide_top_toolbar: false,
+      enable_publishing: false,
+      save_image: false,
+      hide_logo: true,
+      hide_watermark: true,
+      container_id: `tradingview-chart-${Date.now()}`,
     });
 
     containerRef.current.appendChild(script);
@@ -91,6 +79,13 @@ export default function TradingViewAdvancedChart({
           onMouseDown={(e) => e.preventDefault()}
         />
       )}
+      {/* Loading indicator */}
+      <div className="absolute inset-0 flex items-center justify-center bg-gray-100 dark:bg-gray-800">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
+          <p className="text-sm text-gray-600 dark:text-gray-400">Đang tải biểu đồ...</p>
+        </div>
+      </div>
     </div>
   );
 }

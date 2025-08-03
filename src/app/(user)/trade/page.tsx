@@ -15,6 +15,7 @@ import TradeHistory from './TradeHistory';
 import LiquidityTable from '@/components/LiquidityTable';
 import TradingViewTickerTape from '@/components/TradingViewTickerTape';
 import TradingViewAdvancedChart from '@/components/TradingViewAdvancedChart';
+import SymbolSelector from '@/components/SymbolSelector';
 
 // Types
 export interface TradeHistoryRecord {
@@ -546,12 +547,33 @@ export default function TradePage() {
 
     try {
       // Debug log request body
-      const requestBody = {
-        sessionId: currentSessionId,
-        direction: selectedAction,
-        amount: Number(amount),
-        asset: 'Vàng/Đô la Mỹ'
-      };
+             // Lấy tên asset từ symbol hiện tại
+       const getAssetName = (symbol: string) => {
+         const symbolMap: Record<string, string> = {
+           'TVC:GOLD': 'Vàng/Đô la Mỹ',
+           'XAUUSD': 'Vàng/Đô la Mỹ',
+           'GOLD': 'Vàng/Đô la Mỹ',
+           'OANDA:XAUUSD': 'Vàng/Đô la Mỹ',
+           'TVC:SILVER': 'Bạc/Đô la Mỹ',
+           'XAGUSD': 'Bạc/Đô la Mỹ',
+           'EURUSD': 'EUR/USD',
+           'GBPUSD': 'GBP/USD',
+           'USDJPY': 'USD/JPY',
+           'BTCUSD': 'Bitcoin/USD',
+           'ETHUSD': 'Ethereum/USD',
+           'SPX': 'S&P 500',
+           'DJI': 'Dow Jones',
+           'IXIC': 'NASDAQ',
+         };
+         return symbolMap[symbol] || symbol;
+       };
+
+       const requestBody = {
+         sessionId: currentSessionId,
+         direction: selectedAction,
+         amount: Number(amount),
+         asset: getAssetName(chartSymbol)
+       };
 
       // Gọi API để đặt lệnh
       const response = await fetch('/api/trades/place', {
@@ -867,12 +889,16 @@ export default function TradePage() {
                 </CardContent>
               </Card>
 
-              {/* Advanced Chart */}
-              <Card className="bg-white border-gray-500 rounded-md shadow h-[500px]">
-                <CardContent className="p-2 h-full">
-                  <TradingViewAdvancedChart key={chartSymbol} symbol={chartSymbol} />
-                </CardContent>
-              </Card>
+                             {/* Advanced Chart */}
+               <Card className="bg-white border-gray-500 rounded-md shadow h-[500px]">
+                 <CardContent className="p-2 h-full">
+                   <TradingViewAdvancedChart 
+                     key={chartSymbol} 
+                     symbol={chartSymbol} 
+                     interval="1"
+                   />
+                 </CardContent>
+               </Card>
 
               {/* Trade History */}
               <TradeHistory tradeHistory={tradeHistory} formatCurrency={formatCurrency} />
@@ -900,12 +926,16 @@ export default function TradePage() {
                 </CardContent>
               </Card>
 
-              {/* Advanced Chart */}
-              <Card className="bg-white border-gray-500 rounded-md shadow h-[400px]">
-                <CardContent className="p-2 h-full">
-                  <TradingViewAdvancedChart key={chartSymbol} symbol={chartSymbol} />
-                </CardContent>
-              </Card>
+                             {/* Advanced Chart */}
+               <Card className="bg-white border-gray-500 rounded-md shadow h-[400px]">
+                 <CardContent className="p-2 h-full">
+                   <TradingViewAdvancedChart 
+                     key={chartSymbol} 
+                     symbol={chartSymbol} 
+                     interval="1"
+                   />
+                 </CardContent>
+               </Card>
             </div>
 
             {/* 3. Đặt lệnh */}
