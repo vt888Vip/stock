@@ -707,43 +707,6 @@ export default function TradePage() {
         </Dialog>
 
         <div className="max-w-7xl mx-auto">
-                     {/* Debug Component - Chỉ hiển thị trong development */}
-           {process.env.NODE_ENV === 'development' && (
-             <Card className="mb-4 bg-yellow-50 border-yellow-200">
-               <CardHeader>
-                 <CardTitle className="text-yellow-800 text-sm">🔧 Debug Info</CardTitle>
-               </CardHeader>
-               <CardContent className="text-xs text-yellow-700">
-                 <div className="grid grid-cols-2 gap-2">
-                   <div>Current Session ID: <span className="font-mono" suppressHydrationWarning>{currentSessionId}</span></div>
-                   <div>Time Left: <span className="font-mono" suppressHydrationWarning>{timeLeft}s</span></div>
-                   <div>Session Status: <span className="font-mono" suppressHydrationWarning>{sessionStatus}</span></div>
-   
-                   <div>Trade History: <span className="font-mono" suppressHydrationWarning>{tradeHistory.length} trades</span></div>
-                   <div>Current Time: <span className="font-mono" suppressHydrationWarning>{currentTime}</span></div>
-                   <div>Update Countdown: <span className="font-mono" suppressHydrationWarning>{updateCountdown !== null ? `${updateCountdown}s` : 'N/A'}</span></div>
-                   <div>Countdown Started: <span className="font-mono" suppressHydrationWarning>{countdownStarted ? 'Yes' : 'No'}</span></div>
-                   <div>Balance Locked: <span className="font-mono" suppressHydrationWarning>{isBalanceLocked ? 'Yes' : 'No'}</span></div>
-                 </div>
-               </CardContent>
-             </Card>
-           )}
-
-           {/* Thông báo cập nhật tự động */}
-           {updateCountdown !== null && (
-             <Card className="mb-4 bg-blue-50 border-blue-200">
-               <CardHeader>
-                 <CardTitle className="text-blue-800 text-sm">🔄 Cập nhật tự động</CardTitle>
-               </CardHeader>
-               <CardContent className="text-blue-700">
-                 <div className="flex items-center justify-between">
-                   <span>Lịch sử giao dịch và số dư sẽ được cập nhật sau:</span>
-                   <span className="font-bold text-lg" suppressHydrationWarning>{updateCountdown}s</span>
-                 </div>
-               </CardContent>
-             </Card>
-           )}
-
 
 
           {/* Desktop Layout - Đặt lệnh bên trái, biểu đồ và lịch sử bên phải */}
@@ -1067,7 +1030,7 @@ export default function TradePage() {
             {/* 5. Cập nhật */}
             <Card className="bg-white border-gray-300 rounded-md shadow">
               <CardHeader>
-                <CardTitle className="text-gray-900">Cập nhật</CardTitle>
+                <CardTitle className="text-gray-7700">Cập nhật</CardTitle>
               </CardHeader>
               <CardContent>
                 <LiquidityTable />
