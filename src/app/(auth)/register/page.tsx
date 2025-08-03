@@ -48,7 +48,7 @@ export default function RegisterPage() {
       if (isAdmin()) {
         router.push("/admin")
       } else {
-        router.push("/trade")
+        router.push("/")
       }
     }
   }, [isAuthenticated, isAdmin, router, isLoading, isAutoLogin, isRedirecting, preventAutoRedirect])
@@ -160,7 +160,7 @@ export default function RegisterPage() {
             // Chuyển hướng mượt mà
             localStorage.removeItem('preventRedirect')
             setTimeout(() => {
-              window.location.replace("/trade")
+              window.location.replace("/")
             }, 1000)
           } else {
             throw new Error("Đăng nhập tự động thất bại")

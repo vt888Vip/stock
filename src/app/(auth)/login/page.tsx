@@ -39,8 +39,8 @@ export default function LoginPage() {
       if (isAdmin()) {
         router.push("/admin")
       } else {
-        // User thường sẽ được chuyển đến trang trade
-        router.push("/trade")
+        // User thường sẽ được chuyển đến trang chủ
+        router.push("/")
       }
     }
   }, [isAuthenticated, isAdmin, router, isLoading, isRedirecting, preventAutoRedirect])
@@ -75,7 +75,7 @@ export default function LoginPage() {
         setIsLoading(false);
 
         // Xác định trang redirect (admin hoặc user)
-        const redirectUrl = isAdmin() ? '/admin' : '/trade';
+        const redirectUrl = isAdmin() ? '/admin' : '/';
 
         // Delay ngắn để người dùng kịp thấy thông báo
         setTimeout(() => {
