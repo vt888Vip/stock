@@ -24,8 +24,8 @@ export async function POST(req: Request) {
 
     const db = await getMongoDb();
     
-    // Lấy kết quả phiên từ admin
-    const session = await db.collection('sessions').findOne({ sessionId });
+    // Lấy kết quả phiên từ trading_sessions
+    const session = await db.collection('trading_sessions').findOne({ sessionId });
     if (!session) {
       return NextResponse.json({ message: 'Session not found' }, { status: 404 });
     }
@@ -91,6 +91,9 @@ export async function POST(req: Request) {
       .sort({ createdAt: -1 })
       .toArray();
 
+    // Sau khi xử lý kết quả xong, tạo phiên giao dịch mới để duy trì 30 phiên tương lai
+    await createNewFutureSession(db);
+
     return NextResponse.json({
       hasResult: true,
       result: session.result,
@@ -108,4 +111,65 @@ export async function POST(req: Request) {
       { status: 500 }
     );
   }
+}
+
+// Hàm tạo phiên giao dịch mới để duy trì 30 phiên tương lai
+async function createNewFutureSession(db: any) {
+  try {
+    const now = new Date();
+    
+    // Kiểm tra số lượng phiên tương lai hiện tại
+    const futureSessionsCount = await db.collection('trading_sessions').countDocuments({
+      startTime: { $gt: now }
+    });
+
+    console.log(`🔍 Hiện tại có ${futureSessionsCount} phiên tương lai`);
+
+    // Nếu có ít hơn 30 phiên, tạo thêm phiên mới
+    if (futureSessionsCount < 30) {
+      const sessionsToCreate = 30 - futureSessionsCount;
+      console.log(`🆕 Tạo thêm ${sessionsToCreate} phiên để duy trì 30 phiên tương lai`);
+
+      for (let i = 0; i < sessionsToCreate; i++) {
+        const sessionStartTime = new Date(now.getTime() + (i + 1) * 60000); // Mỗi phiên cách nhau 1 phút
+        const sessionEndTime = new Date(sessionStartTime.getTime() + 60000); // Phiên kéo dài 1 phút
+        const sessionId = generateSessionId(sessionStartTime);
+
+        // Kiểm tra sessionId đã tồn tại chưa
+        const exists = await db.collection('trading_sessions').findOne({ sessionId });
+        if (!exists) {
+          // Tự động tạo kết quả cho phiên tương lai (50% UP, 50% DOWN)
+          const random = Math.random();
+          const autoResult = random < 0.5 ? 'UP' : 'DOWN';
+          
+          const newSession = {
+            sessionId,
+            startTime: sessionStartTime,
+            endTime: sessionEndTime,
+            status: 'ACTIVE',
+            result: autoResult, // Tự động tạo kết quả
+            createdBy: 'system',
+            createdAt: now,
+            updatedAt: now
+          };
+
+          await db.collection('trading_sessions').insertOne(newSession);
+          console.log(`🆕 Tạo phiên tương lai ${sessionId} với kết quả ${autoResult}`);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('❌ Lỗi khi tạo phiên tương lai:', error);
+  }
+}
+
+// Hàm tạo sessionId
+function generateSessionId(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  
+  return `${year}${month}${day}${hours}${minutes}`;
 }

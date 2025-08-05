@@ -174,9 +174,9 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Generate random result (60% UP, 40% DOWN)
+        // Generate random result (50% UP, 50% DOWN)
         const random = Math.random();
-        const randomResult = random < 0.6 ? 'UP' : 'DOWN';
+        const randomResult = random < 0.5 ? 'UP' : 'DOWN';
 
         await db.collection('trading_sessions').updateOne(
           { sessionId },
@@ -212,7 +212,7 @@ export async function POST(request: NextRequest) {
           const session = await db.collection('trading_sessions').findOne({ sessionId });
           if (session && session.status !== 'COMPLETED') {
             const random = Math.random();
-            const randomResult = random < 0.6 ? 'UP' : 'DOWN';
+            const randomResult = random < 0.5 ? 'UP' : 'DOWN';
 
             await db.collection('trading_sessions').updateOne(
               { sessionId },

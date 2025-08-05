@@ -51,7 +51,7 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
     endTime: { $lte: now }
   }).toArray();
 
-  console.log(`🔍 [${apiName}] Tìm thấy ${expiredSessions.length} phiên đã hết hạn cần xử lý`);
+  console.log(`🔍 [${apiName}] Tìm thấy ${expiredSessions.length} phiên đã hết hạn cần xử lý (chỉ xử lý phiên có kết quả sẵn)`);
 
   for (const session of expiredSessions) {
     try {
@@ -61,14 +61,12 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
       let result = session.result;
       let createdBy = session.createdBy || 'system';
       
-      if (!result || session.status === 'ACTIVE') {
-        // Nếu chưa có kết quả hoặc phiên đang ACTIVE, tạo kết quả random
-        const random = Math.random();
-        result = random < 0.6 ? 'UP' : 'DOWN';
-        createdBy = 'system';
-        console.log(`🎲 [${apiName}] Tạo kết quả random cho phiên ${session.sessionId}: ${result}`);
+      if (!result) {
+        // Nếu chưa có kết quả, bỏ qua phiên này (để cron job xử lý)
+        console.log(`⚠️ [${apiName}] Phiên ${session.sessionId} không có kết quả, bỏ qua (để cron job xử lý)`);
+        continue;
       } else {
-        console.log(`👑 [${apiName}] Sử dụng kết quả do admin đặt cho phiên ${session.sessionId}: ${result}`);
+        console.log(`👑 [${apiName}] Sử dụng kết quả có sẵn cho phiên ${session.sessionId}: ${result}`);
       }
 
       // 2. Cập nhật trạng thái phiên thành COMPLETED

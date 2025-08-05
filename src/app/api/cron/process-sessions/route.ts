@@ -20,83 +20,27 @@ export async function GET(request: NextRequest) {
 
     console.log('🕐 Cron job bắt đầu xử lý phiên:', now.toISOString());
 
-    // 1. Xử lý các phiên ACTIVE đã kết thúc
+    // 1. Xử lý các phiên ACTIVE đã kết thúc - Đối chiếu sessionId và lấy kết quả có sẵn
+    // Chỉ xử lý phiên chưa được admin xử lý (createdBy !== 'admin')
     const expiredActiveSessions = await db.collection('trading_sessions').find({
       status: 'ACTIVE',
-      endTime: { $lte: now }
+      endTime: { $lte: now },
+      createdBy: { $ne: 'admin' } // Chỉ xử lý phiên không phải admin đặt
     }).toArray();
 
-    console.log(`🔍 Tìm thấy ${expiredActiveSessions.length} phiên ACTIVE đã kết thúc`);
+    console.log(`🔍 Tìm thấy ${expiredActiveSessions.length} phiên ACTIVE đã kết thúc (chưa được admin xử lý)`);
 
     for (const session of expiredActiveSessions) {
       try {
-        // Tạo kết quả random cho phiên đã kết thúc (60% UP, 40% DOWN)
-        const random = Math.random();
-        const predictedResult = random < 0.6 ? 'UP' : 'DOWN';
-        
-        // Chuyển phiên từ ACTIVE sang PREDICTED với kết quả
-        await db.collection('trading_sessions').updateOne(
-          { _id: session._id },
-          { 
-            $set: { 
-              status: 'PREDICTED',
-              result: predictedResult,
-              updatedAt: now
-            }
-          }
-        );
-        
-        results.processedSessions.push({
-          sessionId: session.sessionId,
-          action: 'ACTIVE_TO_PREDICTED',
-          oldStatus: 'ACTIVE',
-          newStatus: 'PREDICTED',
-          result: predictedResult,
-          endTime: session.endTime,
-          timeExpired: Math.floor((now.getTime() - session.endTime.getTime()) / 1000)
-        });
-        
-        results.totalProcessed++;
-        
-        console.log(`✅ Cron: Đã chuyển phiên ${session.sessionId} từ ACTIVE sang PREDICTED, Kết quả: ${predictedResult}`);
-        
-      } catch (error) {
-        const errorMsg = `Lỗi khi xử lý phiên ACTIVE ${session.sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
-        results.errors.push(errorMsg);
-        console.error(errorMsg);
-      }
-    }
-
-    // 2. Xử lý các phiên PREDICTED đã kết thúc (chỉ xử lý phiên không có kết quả admin)
-    const expiredPredictedSessions = await db.collection('trading_sessions').find({
-      status: 'PREDICTED',
-      endTime: { $lte: now },
-      createdBy: { $ne: 'admin' } // Chỉ xử lý phiên không có kết quả admin
-    }).toArray();
-
-    console.log(`🔍 Tìm thấy ${expiredPredictedSessions.length} phiên PREDICTED đã kết thúc (không có kết quả admin)`);
-
-    for (const session of expiredPredictedSessions) {
-      try {
+        // Đối chiếu sessionId để lấy result đã có sẵn từ database
         const sessionResult = session.result;
         
         if (!sessionResult) {
-          // Nếu phiên PREDICTED không có kết quả, tạo kết quả random
-          const random = Math.random();
-          const predictedResult = random < 0.6 ? 'UP' : 'DOWN';
-          
-          await db.collection('trading_sessions').updateOne(
-            { _id: session._id },
-            { 
-              $set: { 
-                result: predictedResult,
-                updatedAt: now
-              }
-            }
-          );
-          
-          console.log(`✅ Cron: Đã thêm kết quả cho phiên ${session.sessionId}: ${predictedResult}`);
+          console.log(`⚠️ Cron: Phiên ${session.sessionId} không có kết quả, bỏ qua`);
+          continue;
         }
+
+        console.log(`🎯 Cron: Đối chiếu sessionId ${session.sessionId} - Kết quả: ${sessionResult}`);
 
         // Tìm tất cả lệnh pending của phiên này
         const pendingTrades = await db.collection('trades').find({
@@ -112,10 +56,14 @@ export async function GET(request: NextRequest) {
         let totalWinAmount = 0;
         let totalLossAmount = 0;
 
-        // Cập nhật kết quả cho từng lệnh
+        // Tính toán kết quả cho từng lệnh dựa trên result có sẵn
         for (const trade of pendingTrades) {
+          console.log(`🔍 Cron: Debug - Trade ${trade._id}: direction=${trade.direction}, sessionResult=${sessionResult}, userId=${trade.userId}`);
+          
           const isWin = trade.direction === sessionResult;
           const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 10 ăn 9
+
+          console.log(`🎯 Cron: So sánh - trade.direction (${trade.direction}) === sessionResult (${sessionResult}) = ${isWin}`);
 
           const updateData = {
             status: 'completed',
@@ -164,7 +112,7 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        // Chuyển phiên từ PREDICTED sang COMPLETED sau khi xử lý xong
+        // Đổi trạng thái từ ACTIVE sang COMPLETED sau khi tính toán xong
         await db.collection('trading_sessions').updateOne(
           { _id: session._id },
           { 
@@ -183,8 +131,8 @@ export async function GET(request: NextRequest) {
 
         results.processedSessions.push({
           sessionId: session.sessionId,
-          action: 'PREDICTED_TO_COMPLETED',
-          oldStatus: 'PREDICTED',
+          action: 'ACTIVE_TO_COMPLETED',
+          oldStatus: 'ACTIVE',
           newStatus: 'COMPLETED',
           result: sessionResult,
           totalTrades: pendingTrades.length,
@@ -201,49 +149,14 @@ export async function GET(request: NextRequest) {
         console.log(`📈 Cron: Hoàn thành phiên ${session.sessionId}: ${totalWins} thắng, ${totalLosses} thua, Tổng thắng: ${totalWinAmount}, Tổng thua: ${totalLossAmount}`);
         
       } catch (error) {
-        const errorMsg = `Lỗi khi xử lý phiên PREDICTED ${session.sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        const errorMsg = `Lỗi khi xử lý phiên ACTIVE ${session.sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
         results.errors.push(errorMsg);
         console.error(errorMsg);
       }
     }
 
-    // 3. Tạo phiên mới nếu cần
-    const currentMinute = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), now.getUTCHours(), now.getUTCMinutes()));
-    const nextMinute = new Date(currentMinute.getTime() + 60000);
-    const sessionId = `${currentMinute.getUTCFullYear()}${String(currentMinute.getUTCMonth() + 1).padStart(2, '0')}${String(currentMinute.getUTCDate()).padStart(2, '0')}${String(currentMinute.getUTCHours()).padStart(2, '0')}${String(currentMinute.getUTCMinutes()).padStart(2, '0')}`;
-
-    // Kiểm tra xem phiên hiện tại có tồn tại không
-    const currentSession = await db.collection('trading_sessions').findOne({ 
-      sessionId: sessionId,
-      status: { $in: ['ACTIVE', 'PREDICTED'] }
-    });
-
-    if (!currentSession) {
-      // Tạo phiên mới
-      const newSession = {
-        sessionId,
-        startTime: currentMinute,
-        endTime: nextMinute,
-        status: 'ACTIVE',
-        result: null,
-        createdAt: now,
-        updatedAt: now
-      };
-
-      await db.collection('trading_sessions').insertOne(newSession);
-      
-      results.processedSessions.push({
-        sessionId: sessionId,
-        action: 'CREATE_NEW_SESSION',
-        newStatus: 'ACTIVE',
-        startTime: currentMinute,
-        endTime: nextMinute
-      });
-      
-      results.totalProcessed++;
-      
-      console.log(`🆕 Cron: Đã tạo phiên mới ${sessionId} với trạng thái ACTIVE`);
-    }
+    // 2. Chức năng duy trì 30 phiên tương lai đã được tắt
+    console.log('🚫 Chức năng duy trì 30 phiên tương lai đã được tắt');
 
     console.log(`✅ Cron job hoàn thành: Xử lý ${results.totalProcessed} phiên, ${results.errors.length} lỗi`);
 
@@ -260,4 +173,15 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
+}
+
+// Hàm tạo sessionId
+function generateSessionId(date: Date): string {
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const hours = String(date.getUTCHours()).padStart(2, '0');
+  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+  
+  return `${year}${month}${day}${hours}${minutes}`;
 } 

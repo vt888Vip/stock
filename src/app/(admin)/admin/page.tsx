@@ -32,7 +32,6 @@ import {
   Search,
   X,
   Zap,
-  RefreshCw,
   TrendingDown
 } from 'lucide-react';
 import UploadImage from '@/components/UploadImage';
@@ -146,6 +145,17 @@ export default function AdminDashboard() {
   useEffect(() => {
     if (isAuthenticated() && isAdmin() && activeTab === 'session-results') {
       loadFutureSessions();
+    }
+  }, [activeTab]);
+
+  // Auto-refresh future sessions every 2 minutes when on session-results tab
+  useEffect(() => {
+    if (isAuthenticated() && isAdmin() && activeTab === 'session-results') {
+      const interval = setInterval(() => {
+        loadFutureSessions();
+      }, 120000); // Refresh every 2 minutes
+
+      return () => clearInterval(interval);
     }
   }, [activeTab]);
 
@@ -624,46 +634,7 @@ export default function AdminDashboard() {
     }
   };
 
-  // Nút làm mới - Tạo lại 30 phiên giao dịch tương lai
-  const handleRefreshSessions = async () => {
-    try {
-      setLoadingFuture(true);
-      const response = await fetch('/api/admin/session-results/future', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          action: 'generate_future_sessions'
-        })
-      });
 
-      const data = await response.json();
-      if (data.success) {
-        toast({
-          title: 'Thành công',
-          description: 'Đã tạo lại 30 phiên giao dịch tương lai',
-        });
-        loadFutureSessions();
-      } else {
-        toast({
-          title: 'Lỗi',
-          description: data.message,
-          variant: 'destructive',
-        });
-      }
-    } catch (error) {
-      console.error('Error refreshing sessions:', error);
-      toast({
-        title: 'Lỗi',
-        description: 'Không thể tạo lại phiên giao dịch',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoadingFuture(false);
-    }
-  };
 
   // Nút đặt kết quả cho 30 phiên - Random kết quả hàng loạt
   const handleSetResultsFor30Sessions = async () => {
@@ -677,7 +648,7 @@ export default function AdminDashboard() {
     }
 
     // Hiển thị thông báo xác nhận
-    if (!confirm(`Bạn có chắc muốn đặt kết quả cho ${activeSessions.length} phiên giao dịch tương lai?\n\nKết quả sẽ được random với tỷ lệ 60% UP, 40% DOWN.`)) {
+    if (!confirm(`Bạn có chắc muốn đặt kết quả cho ${activeSessions.length} phiên giao dịch tương lai?\n\nKết quả sẽ được random với tỷ lệ 50% UP, 50% DOWN.`)) {
       return;
     }
 
@@ -1828,28 +1799,10 @@ export default function AdminDashboard() {
             {/* Header */}
             <div className="flex justify-between items-start">
               <div>
-                <h1 className="text-3xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</h1>
-                <p className="text-gray-600 mt-2">Quản lý 30 phiên giao dịch tương lai với độ chính xác 100%</p>
+                <h1 className="text-3xl font-bold text-gray-900">Xem 30 phiên giao dịch tương lai</h1>
+                <p className="text-gray-600 mt-2">Hệ thống tự động duy trì 30 phiên tương lai với kết quả sẵn (đã được tối ưu hóa)</p>
               </div>
-              <div className="flex gap-4">
-                <Button 
-                  onClick={handleRefreshSessions} 
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg font-semibold"
-                  disabled={loadingFuture}
-                >
-                  <RefreshCw className="w-5 h-5 mr-2" />
-                  Làm mới
-                </Button>
-                
-                <Button 
-                  onClick={handleSetResultsFor30Sessions} 
-                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 text-lg font-semibold"
-                  disabled={loadingFuture}
-                >
-                  <Zap className="w-5 h-5 mr-2" />
-                  Đặt kết quả cho 30 phiên
-                </Button>
-              </div>
+
             </div>
 
             {/* Future Sessions Section */}
@@ -1857,10 +1810,10 @@ export default function AdminDashboard() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-green-800">
                   <Target className="h-5 w-5" />
-                  30 phiên giao dịch tương lai (Độ chính xác 100%)
+                  30 phiên giao dịch tương lai (Tự động duy trì)
                 </CardTitle>
                 <CardDescription className="text-green-700">
-                  Quản lý kết quả cho 30 phiên giao dịch sắp tới với độ chính xác 100%
+                  Hệ thống tự động duy trì 30 phiên tương lai với kết quả sẵn, không cần thao tác thủ công
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -1903,21 +1856,8 @@ export default function AdminDashboard() {
                             <TableCell>
                               <div className="flex gap-2">
                                 {session.status === 'ACTIVE' && (
-                                  <Button
-                                    size="sm"
-                                    onClick={() => {
-                                      setSelectedSession(session);
-                                      setShowSetResultDialog(true);
-                                    }}
-                                    className="bg-green-600 hover:bg-green-700"
-                                  >
-                                    <Settings className="w-3 h-3 mr-1" />
-                                    Đặt kết quả
-                                  </Button>
-                                )}
-                                {session.status === 'PREDICTED' && (
-                                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
-                                    Đã có kết quả
+                                  <Badge variant="outline" className="text-xs bg-green-50 text-green-700">
+                                    Sẵn sàng
                                   </Badge>
                                 )}
                                 {session.status === 'COMPLETED' && (
@@ -1936,50 +1876,19 @@ export default function AdminDashboard() {
 
                 {/* Future Sessions Info */}
                 <div className="mt-4 p-4 bg-white rounded-lg border border-green-200">
-                  <h4 className="font-semibold text-green-800 mb-2">Thông tin quan trọng:</h4>
+                  <h4 className="font-semibold text-green-800 mb-2">Thông tin hệ thống tự động (Đã tối ưu hóa):</h4>
                   <ul className="text-sm text-green-700 space-y-1">
-                    <li>• <strong>Nút "Làm mới":</strong> Tạo lại 30 phiên giao dịch tương lai mới</li>
-                    <li>• <strong>Nút "Đặt kết quả cho 30 phiên":</strong> Random kết quả cho tất cả phiên chưa có kết quả (60% UP, 40% DOWN)</li>
-                    <li>• <strong>Độ chính xác 100%:</strong> Kết quả được đặt sẽ được sử dụng chính xác khi phiên kết thúc</li>
+                    <li>• <strong>Tự động duy trì:</strong> Hệ thống luôn đảm bảo có đúng 30 phiên tương lai</li>
+                    <li>• <strong>Tự động tạo kết quả:</strong> Mỗi phiên mới được tạo với kết quả sẵn (50% UP, 50% DOWN)</li>
+                    <li>• <strong>Tối ưu hóa hiệu suất:</strong> Phiên mới được tạo sau khi người dùng lấy kết quả</li>
+                    <li>• <strong>Không cần thao tác:</strong> Admin chỉ cần xem, không cần đặt kết quả thủ công</li>
                     <li>• <strong>Thời gian thực:</strong> Hiển thị thời gian còn lại đến khi phiên bắt đầu</li>
                   </ul>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Set Result Dialog */}
-            <Dialog open={showSetResultDialog} onOpenChange={setShowSetResultDialog}>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Đặt kết quả cho phiên {selectedSession?.sessionId}</DialogTitle>
-                  <DialogDescription>
-                    Chọn kết quả cho phiên giao dịch này. Kết quả này sẽ được sử dụng khi phiên kết thúc.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-700">Kết quả:</Label>
-                    <Select value={selectedResult} onValueChange={(value: 'UP' | 'DOWN') => setSelectedResult(value)}>
-                      <SelectTrigger className="mt-1">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="UP">LÊN (UP)</SelectItem>
-                        <SelectItem value="DOWN">XUỐNG (DOWN)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-                <DialogFooter>
-                  <Button variant="outline" onClick={() => setShowSetResultDialog(false)}>
-                    Hủy
-                  </Button>
-                  <Button onClick={handleSetResult}>
-                    Xác nhận
-                  </Button>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
+
           </div>
         )}
       </main>

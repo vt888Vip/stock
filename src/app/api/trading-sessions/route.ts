@@ -48,22 +48,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (!currentSession) {
-      // Tạo phiên mới với trạng thái ACTIVE (chưa có kết quả)
-      const newSession = {
-        sessionId,
-        startTime: currentMinute,
-        endTime: nextMinute,
-        status: 'ACTIVE', // Bắt đầu với ACTIVE
-        result: null, // Chưa có kết quả
-        createdAt: now,
-        updatedAt: now
-      };
-
-      console.log('🆕 Tạo phiên mới với trạng thái ACTIVE:', newSession);
-
-      // Tạo phiên mới (không xóa phiên cũ)
-      await db.collection('trading_sessions').insertOne(newSession);
-      currentSession = newSession as any;
+      // Chức năng tự động tạo phiên mới đã được tắt
+      console.log('🚫 Chức năng tự động tạo phiên mới đã được tắt');
+      currentSession = null;
     }
 
     // Lấy phiên tiếp theo
@@ -107,51 +94,11 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === 'create_predictions') {
-      // Tạo dự đoán cho 30 phiên tiếp theo
-      const now = new Date();
-      const predictions = [];
-
-      for (let i = 1; i <= 30; i++) {
-        const sessionTime = new Date(now.getTime() + (i * 60 * 1000));
-        
-        const year = sessionTime.getFullYear().toString();
-        const month = (sessionTime.getMonth() + 1).toString().padStart(2, '0');
-        const day = sessionTime.getDate().toString().padStart(2, '0');
-        const hours = sessionTime.getHours().toString().padStart(2, '0');
-        const minutes = sessionTime.getMinutes().toString().padStart(2, '0');
-        const sessionId = `${year}${month}${day}${hours}${minutes}`;
-
-        // Kiểm tra xem phiên đã tồn tại chưa
-        const existingSession = await db.collection('trading_sessions').findOne({ sessionId });
-        
-        if (!existingSession) {
-          const startTime = new Date(sessionTime);
-          const endTime = new Date(sessionTime.getTime() + 60 * 1000);
-
-          await db.collection('trading_sessions').insertOne({
-            sessionId,
-            result: null, // Chưa có kết quả
-            startTime,
-            endTime,
-            status: 'ACTIVE', // Bắt đầu với ACTIVE
-            createdAt: new Date(),
-            updatedAt: new Date()
-          });
-
-          predictions.push({
-            sessionId,
-            result: null,
-            startTime,
-            endTime,
-            status: 'ACTIVE'
-          });
-        }
-      }
-
+      // Chức năng tạo dự đoán cho 30 phiên tiếp theo đã được tắt
       return NextResponse.json({
-        success: true,
-        message: `Đã tạo ${predictions.length} phiên mới với trạng thái ACTIVE`,
-        data: predictions
+        success: false,
+        message: 'Chức năng tạo dự đoán cho 30 phiên tiếp theo đã được tắt',
+        data: []
       });
     }
 

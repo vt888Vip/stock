@@ -19,25 +19,19 @@ export async function GET(request: NextRequest) {
 
       const now = new Date();
       
-      // Tạo 30 phiên giao dịch tương lai nếu chưa có
+      // Tạo 30 phiên giao dịch tương lai nếu chưa có (đã được tối ưu hóa)
       await createFutureSessions(db, now);
 
-      // Lấy danh sách phiên tương lai (chưa bắt đầu)
+      // Lấy tất cả phiên tương lai
       const futureSessions = await db.collection('trading_sessions')
         .find({
-          startTime: { $gt: now },
-          status: { $in: ['ACTIVE', 'PREDICTED'] }
+          startTime: { $gt: now }
         })
-        .sort({ startTime: 1 })
-        .skip(skip)
-        .limit(limit)
+        .sort({ startTime: 1 }) // Sắp xếp theo thời gian bắt đầu (sớm nhất trước)
         .toArray();
 
-      // Đếm tổng số phiên tương lai
-      const total = await db.collection('trading_sessions').countDocuments({
-        startTime: { $gt: now },
-        status: { $in: ['ACTIVE', 'PREDICTED'] }
-      });
+      // Đếm tổng số phiên tương lai (luôn là 30)
+      const total = futureSessions.length;
 
       // Format sessions for frontend
       const formattedSessions = futureSessions.map(session => ({
@@ -344,9 +338,9 @@ export async function POST(request: NextRequest) {
         for (const sessionId of sessionIds) {
           const session = await db.collection('trading_sessions').findOne({ sessionId });
           if (session && session.status === 'ACTIVE') {
-            // Generate random result (60% UP, 40% DOWN)
+            // Generate random result (50% UP, 50% DOWN)
             const random = Math.random();
-            const randomResult = random < 0.6 ? 'UP' : 'DOWN';
+            const randomResult = random < 0.5 ? 'UP' : 'DOWN';
 
             const now = new Date();
             
@@ -443,7 +437,7 @@ export async function POST(request: NextRequest) {
         });
 
       } else if (action === 'generate_future_sessions') {
-        // Tạo lại 30 phiên giao dịch tương lai
+        // Tạo lại 30 phiên giao dịch tương lai (đã được tối ưu hóa)
         const now = new Date();
         await createFutureSessions(db, now);
 
@@ -470,7 +464,7 @@ export async function POST(request: NextRequest) {
   });
 }
 
-// Hàm tạo 30 phiên giao dịch tương lai
+// Hàm tạo 30 phiên giao dịch tương lai (đã được tối ưu hóa)
 async function createFutureSessions(db: any, startTime: Date) {
   const now = new Date();
   
@@ -480,10 +474,13 @@ async function createFutureSessions(db: any, startTime: Date) {
   });
 
   if (existingFutureSessions >= 30) {
+    console.log(`✅ Đã có đủ ${existingFutureSessions} phiên tương lai, không cần tạo thêm`);
     return; // Đã có đủ 30 phiên tương lai
   }
 
   const sessionsToCreate = 30 - existingFutureSessions;
+  console.log(`🆕 Tạo thêm ${sessionsToCreate} phiên để duy trì 30 phiên tương lai`);
+  
   const sessions = [];
 
   let createdCount = 0;
@@ -496,12 +493,16 @@ async function createFutureSessions(db: any, startTime: Date) {
     // Kiểm tra sessionId đã tồn tại chưa
     const exists = await db.collection('trading_sessions').findOne({ sessionId });
     if (!exists) {
+      // Tự động tạo kết quả cho phiên tương lai (50% UP, 50% DOWN)
+      const random = Math.random();
+      const autoResult = random < 0.5 ? 'UP' : 'DOWN';
+      
       sessions.push({
         sessionId,
         startTime: sessionStartTime,
         endTime: sessionEndTime,
         status: 'ACTIVE',
-        result: null,
+        result: autoResult, // Tự động tạo kết quả
         createdBy: 'system',
         createdAt: now,
         updatedAt: now
@@ -513,7 +514,7 @@ async function createFutureSessions(db: any, startTime: Date) {
 
   if (sessions.length > 0) {
     await db.collection('trading_sessions').insertMany(sessions);
-    console.log(`Created ${sessions.length} future sessions`);
+    console.log(`✅ Đã tạo ${sessions.length} phiên tương lai mới`);
   }
 }
 
