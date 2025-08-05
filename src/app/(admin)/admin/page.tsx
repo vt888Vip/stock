@@ -4,13 +4,13 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Textarea } from '../../../../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
@@ -30,7 +30,10 @@ import {
   Edit,
   Target,
   Search,
-  X
+  X,
+  Zap,
+  RefreshCw,
+  TrendingDown
 } from 'lucide-react';
 import UploadImage from '@/components/UploadImage';
 import { useToast } from '@/components/ui/use-toast';
@@ -79,6 +82,13 @@ export default function AdminDashboard() {
   const [showBankModal, setShowBankModal] = useState(false);
   const [showBankDeleteConfirm, setShowBankDeleteConfirm] = useState(false);
   const [bankToDelete, setBankToDelete] = useState<any>(null);
+
+  // Session results states
+  const [futureSessions, setFutureSessions] = useState<any[]>([]);
+  const [loadingFuture, setLoadingFuture] = useState(false);
+  const [selectedSession, setSelectedSession] = useState<any>(null);
+  const [showSetResultDialog, setShowSetResultDialog] = useState(false);
+  const [selectedResult, setSelectedResult] = useState<'UP' | 'DOWN'>('UP');
 
   // Search states
   const [searchName, setSearchName] = useState('');
@@ -131,6 +141,13 @@ export default function AdminDashboard() {
       loadOrders();
     }
   }, [searchOrderUsername, searchOrderSessionId, searchOrderDate, ordersPage, activeTab]);
+
+  // Load future sessions when session-results tab is selected
+  useEffect(() => {
+    if (isAuthenticated() && isAdmin() && activeTab === 'session-results') {
+      loadFutureSessions();
+    }
+  }, [activeTab]);
 
   const loadOrders = async () => {
     try {
@@ -576,6 +593,219 @@ export default function AdminDashboard() {
         variant: 'destructive',
       });
     }
+  };
+
+  // Session Results Functions
+  const loadFutureSessions = async () => {
+    try {
+      setLoadingFuture(true);
+      const response = await fetch('/api/admin/session-results/future', {
+        credentials: 'include',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          setFutureSessions(data.data.sessions);
+        } else {
+          setFutureSessions([]);
+        }
+      } else {
+        setFutureSessions([]);
+      }
+    } catch (error) {
+      console.error('Error loading future sessions:', error);
+      setFutureSessions([]);
+    } finally {
+      setLoadingFuture(false);
+    }
+  };
+
+  // Nút làm mới - Tạo lại 30 phiên giao dịch tương lai
+  const handleRefreshSessions = async () => {
+    try {
+      setLoadingFuture(true);
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'generate_future_sessions'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: 'Đã tạo lại 30 phiên giao dịch tương lai',
+        });
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error refreshing sessions:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể tạo lại phiên giao dịch',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingFuture(false);
+    }
+  };
+
+  // Nút đặt kết quả cho 30 phiên - Random kết quả hàng loạt
+  const handleSetResultsFor30Sessions = async () => {
+    const activeSessions = futureSessions.filter(s => s.status === 'ACTIVE');
+    if (activeSessions.length === 0) {
+      toast({
+        title: 'Thông báo',
+        description: 'Không có phiên nào cần đặt kết quả',
+      });
+      return;
+    }
+
+    // Hiển thị thông báo xác nhận
+    if (!confirm(`Bạn có chắc muốn đặt kết quả cho ${activeSessions.length} phiên giao dịch tương lai?\n\nKết quả sẽ được random với tỷ lệ 60% UP, 40% DOWN.`)) {
+      return;
+    }
+
+    try {
+      setLoadingFuture(true);
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'bulk_random_results',
+          sessionIds: activeSessions.map(s => s.sessionId)
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: `Đã đặt kết quả cho ${data.data.results.length} phiên giao dịch tương lai`,
+        });
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error setting results for 30 sessions:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể đặt kết quả hàng loạt',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingFuture(false);
+    }
+  };
+
+  const handleSetResult = async () => {
+    if (!selectedSession || !selectedResult) return;
+
+    try {
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'set_future_result',
+          sessionId: selectedSession.sessionId,
+          result: selectedResult
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: data.message,
+        });
+        setShowSetResultDialog(false);
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error setting result:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể cập nhật kết quả',
+        variant: 'destructive',
+      });
+    }
+  };
+
+
+
+  const getStatusBadge = (status: string) => {
+    switch (status) {
+      case 'ACTIVE':
+        return <Badge className="bg-green-100 text-green-800">Đang hoạt động</Badge>;
+      case 'PREDICTED':
+        return <Badge className="bg-yellow-100 text-yellow-800">Đã dự đoán</Badge>;
+      case 'COMPLETED':
+        return <Badge className="bg-blue-100 text-blue-800">Đã hoàn thành</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
+    }
+  };
+
+  const getResultBadge = (result?: string) => {
+    if (!result) return <Badge variant="outline">Chưa có</Badge>;
+    return result === 'UP' 
+      ? <Badge className="bg-green-100 text-green-800 flex items-center gap-1"><TrendingUp className="w-3 h-3" />LÊN</Badge>
+      : <Badge className="bg-red-100 text-red-800 flex items-center gap-1"><TrendingDown className="w-3 h-3" />XUỐNG</Badge>;
+  };
+
+  const getCreatedByBadge = (createdBy?: string) => {
+    if (!createdBy) return <Badge variant="outline">Hệ thống</Badge>;
+    return createdBy === 'admin' 
+      ? <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
+      : <Badge className="bg-gray-100 text-gray-800">Hệ thống</Badge>;
+  };
+
+  const getTimeUntilStart = (startTime: string) => {
+    const now = new Date();
+    const start = new Date(startTime);
+    const diff = start.getTime() - now.getTime();
+    
+    if (diff <= 0) return 'Đã bắt đầu';
+    
+    const minutes = Math.floor(diff / 60000);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (days > 0) return `${days} ngày ${hours % 24} giờ`;
+    if (hours > 0) return `${hours} giờ ${minutes % 60} phút`;
+    return `${minutes} phút`;
   };
 
   // Loading state
@@ -1592,382 +1822,166 @@ export default function AdminDashboard() {
           </Card>
         )}
 
-        {/* Session Results Tab */}
+        {/* Session Results Management */}
         {activeTab === 'session-results' && (
           <div className="space-y-6">
-            <Card className="bg-white/90 backdrop-blur-sm border-0 shadow-xl">
-              <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 border-b border-purple-200">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 bg-purple-600 rounded-lg">
-                    <Target className="h-5 w-5 text-white" />
-                  </div>
-                  <div>
-                    <CardTitle className="text-xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</CardTitle>
-                    <p className="text-sm text-gray-600 mt-1">Đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch</p>
-                  </div>
-                </div>
+            {/* Header */}
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</h1>
+                <p className="text-gray-600 mt-2">Quản lý 30 phiên giao dịch tương lai với độ chính xác 100%</p>
+              </div>
+              <div className="flex gap-4">
+                <Button 
+                  onClick={handleRefreshSessions} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 text-lg font-semibold"
+                  disabled={loadingFuture}
+                >
+                  <RefreshCw className="w-5 h-5 mr-2" />
+                  Làm mới
+                </Button>
+                
+                <Button 
+                  onClick={handleSetResultsFor30Sessions} 
+                  className="bg-green-600 hover:bg-green-700 text-white px-6 py-3 text-lg font-semibold"
+                  disabled={loadingFuture}
+                >
+                  <Zap className="w-5 h-5 mr-2" />
+                  Đặt kết quả cho 30 phiên
+                </Button>
+              </div>
+            </div>
+
+            {/* Future Sessions Section */}
+            <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-green-800">
+                  <Target className="h-5 w-5" />
+                  30 phiên giao dịch tương lai (Độ chính xác 100%)
+                </CardTitle>
+                <CardDescription className="text-green-700">
+                  Quản lý kết quả cho 30 phiên giao dịch sắp tới với độ chính xác 100%
+                </CardDescription>
               </CardHeader>
-              <CardContent className="p-6">
-                <div className="text-center py-8">
-                  <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-gray-700 mb-2">Chức năng quản lý kết quả phiên giao dịch</h3>
-                  <p className="text-gray-500 mb-4">
-                    Tính năng này cho phép admin đặt kết quả thủ công hoặc tạo ngẫu nhiên cho các phiên giao dịch.
-                  </p>
-                  <div className="space-y-2 text-sm text-gray-600">
-                    <p>• Đặt kết quả thủ công (LÊN/XUỐNG) cho từng phiên</p>
-                    <p>• Tạo kết quả ngẫu nhiên cho từng phiên</p>
-                    <p>• Tạo kết quả hàng loạt cho nhiều phiên</p>
-                    <p>• Theo dõi trạng thái và kết quả của các phiên</p>
+              <CardContent>
+
+                {/* Future Sessions Table */}
+                {loadingFuture ? (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+                    <span className="ml-2 text-green-700">Đang tải 30 phiên tương lai...</span>
                   </div>
-                  <div className="mt-6">
-                    <Button 
-                      onClick={() => window.open('/admin/session-results', '_blank')}
-                      className="bg-purple-600 hover:bg-purple-700"
-                    >
-                      <Target className="h-4 w-4 mr-2" />
-                      Mở trang quản lý kết quả phiên giao dịch
-                    </Button>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-green-50">
+                          <TableHead className="text-green-800">Mã phiên</TableHead>
+                          <TableHead className="text-green-800">Thời gian bắt đầu</TableHead>
+                          <TableHead className="text-green-800">Thời gian kết thúc</TableHead>
+                          <TableHead className="text-green-800">Còn lại</TableHead>
+                          <TableHead className="text-green-800">Trạng thái</TableHead>
+                          <TableHead className="text-green-800">Kết quả</TableHead>
+                          <TableHead className="text-green-800">Người tạo</TableHead>
+                          <TableHead className="text-green-800">Thao tác</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {futureSessions.map((session) => (
+                          <TableRow key={session._id} className="hover:bg-green-50">
+                            <TableCell className="font-mono text-sm font-semibold">{session.sessionId}</TableCell>
+                            <TableCell>{new Date(session.startTime).toLocaleString('vi-VN')}</TableCell>
+                            <TableCell>{new Date(session.endTime).toLocaleString('vi-VN')}</TableCell>
+                            <TableCell>
+                              <span className="text-sm font-medium text-blue-600">
+                                {getTimeUntilStart(session.startTime)}
+                              </span>
+                            </TableCell>
+                            <TableCell>{getStatusBadge(session.status)}</TableCell>
+                            <TableCell>{getResultBadge(session.result)}</TableCell>
+                            <TableCell>{getCreatedByBadge(session.createdBy)}</TableCell>
+                            <TableCell>
+                              <div className="flex gap-2">
+                                {session.status === 'ACTIVE' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => {
+                                      setSelectedSession(session);
+                                      setShowSetResultDialog(true);
+                                    }}
+                                    className="bg-green-600 hover:bg-green-700"
+                                  >
+                                    <Settings className="w-3 h-3 mr-1" />
+                                    Đặt kết quả
+                                  </Button>
+                                )}
+                                {session.status === 'PREDICTED' && (
+                                  <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
+                                    Đã có kết quả
+                                  </Badge>
+                                )}
+                                {session.status === 'COMPLETED' && (
+                                  <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                                    Đã hoàn thành
+                                  </Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
                   </div>
+                )}
+
+                {/* Future Sessions Info */}
+                <div className="mt-4 p-4 bg-white rounded-lg border border-green-200">
+                  <h4 className="font-semibold text-green-800 mb-2">Thông tin quan trọng:</h4>
+                  <ul className="text-sm text-green-700 space-y-1">
+                    <li>• <strong>Nút "Làm mới":</strong> Tạo lại 30 phiên giao dịch tương lai mới</li>
+                    <li>• <strong>Nút "Đặt kết quả cho 30 phiên":</strong> Random kết quả cho tất cả phiên chưa có kết quả (60% UP, 40% DOWN)</li>
+                    <li>• <strong>Độ chính xác 100%:</strong> Kết quả được đặt sẽ được sử dụng chính xác khi phiên kết thúc</li>
+                    <li>• <strong>Thời gian thực:</strong> Hiển thị thời gian còn lại đến khi phiên bắt đầu</li>
+                  </ul>
                 </div>
               </CardContent>
             </Card>
+
+            {/* Set Result Dialog */}
+            <Dialog open={showSetResultDialog} onOpenChange={setShowSetResultDialog}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Đặt kết quả cho phiên {selectedSession?.sessionId}</DialogTitle>
+                  <DialogDescription>
+                    Chọn kết quả cho phiên giao dịch này. Kết quả này sẽ được sử dụng khi phiên kết thúc.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700">Kết quả:</Label>
+                    <Select value={selectedResult} onValueChange={(value: 'UP' | 'DOWN') => setSelectedResult(value)}>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="UP">LÊN (UP)</SelectItem>
+                        <SelectItem value="DOWN">XUỐNG (DOWN)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setShowSetResultDialog(false)}>
+                    Hủy
+                  </Button>
+                  <Button onClick={handleSetResult}>
+                    Xác nhận
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         )}
-
-        {/* User Edit Modal */}
-        <Dialog open={showUserModal} onOpenChange={setShowUserModal}>
-          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Thông tin người dùng</DialogTitle>
-            </DialogHeader>
-            {editingUser && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Username</Label>
-                    <Input
-                      value={editingUser.username || ''}
-                      onChange={(e) => setEditingUser({...editingUser, username: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Email</Label>
-                    <Input
-                      value={editingUser.email || ''}
-                      onChange={(e) => setEditingUser({...editingUser, email: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Vai trò</Label>
-                    <Select
-                      value={editingUser.role || 'user'}
-                      onValueChange={(value) => setEditingUser({...editingUser, role: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="user">User</SelectItem>
-                        <SelectItem value="admin">Admin</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>Số dư khả dụng</Label>
-                    <Input
-                      type="number"
-                      value={editingUser.balance?.available || 0}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser, 
-                        balance: {...editingUser.balance, available: Number(e.target.value)}
-                      })}
-                    />
-                  </div>
-                  <div>
-                    <Label>Trạng thái hoạt động</Label>
-                    <Select
-                      value={editingUser.status?.active ? 'true' : 'false'}
-                      onValueChange={(value) => setEditingUser({
-                        ...editingUser, 
-                        status: {...editingUser.status, active: value === 'true'}
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="true">Hoạt động</SelectItem>
-                        <SelectItem value="false">Khóa</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Thông tin ngân hàng</Label>
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <Input
-                      placeholder="Tên ngân hàng"
-                      value={editingUser.bank?.name || ''}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser, 
-                        bank: {...editingUser.bank, name: e.target.value}
-                      })}
-                    />
-                    <Input
-                      placeholder="Số tài khoản"
-                      value={editingUser.bank?.accountNumber || ''}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser, 
-                        bank: {...editingUser.bank, accountNumber: e.target.value}
-                      })}
-                    />
-                    <Input
-                      placeholder="Chủ tài khoản"
-                      value={editingUser.bank?.accountHolder || ''}
-                      onChange={(e) => setEditingUser({
-                        ...editingUser, 
-                        bank: {...editingUser.bank, accountHolder: e.target.value}
-                      })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>Xác minh CCCD</Label>
-                  <div className="grid grid-cols-2 gap-4 mt-2">
-                    <div>
-                      <Label className="text-sm">Mặt trước</Label>
-                      {editingUser.verification?.cccdFront ? (
-                        <div className="relative">
-                          <img 
-                            src={editingUser.verification.cccdFront} 
-                            alt="CCCD Front" 
-                            className="w-full h-32 object-cover rounded border"
-                          />
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setEditingUser({
-                              ...editingUser,
-                              verification: {...editingUser.verification, cccdFront: ''}
-                            })}
-                            className="absolute top-2 right-2"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <UploadImage
-                          onChange={(files) => {
-                            if (files.length > 0 && files[0].url) {
-                              setEditingUser({
-                                ...editingUser,
-                                verification: {...editingUser.verification, cccdFront: files[0].url}
-                              });
-                            }
-                          }}
-                          maxCount={1}
-                        />
-                      )}
-                    </div>
-                    <div>
-                      <Label className="text-sm">Mặt sau</Label>
-                      {editingUser.verification?.cccdBack ? (
-                        <div className="relative">
-                          <img 
-                            src={editingUser.verification.cccdBack} 
-                            alt="CCCD Back" 
-                            className="w-full h-32 object-cover rounded border"
-                          />
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setEditingUser({
-                              ...editingUser,
-                              verification: {...editingUser.verification, cccdBack: ''}
-                            })}
-                            className="absolute top-2 right-2"
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      ) : (
-                        <UploadImage
-                          onChange={(files) => {
-                            if (files.length > 0 && files[0].url) {
-                              setEditingUser({
-                                ...editingUser,
-                                verification: {...editingUser.verification, cccdBack: files[0].url}
-                              });
-                            }
-                          }}
-                          maxCount={1}
-                        />
-                      )}
-                    </div>
-                  </div>
-                  <div className="mt-2">
-                    <Select
-                      value={editingUser.verification?.verified ? 'true' : 'false'}
-                      onValueChange={(value) => setEditingUser({
-                        ...editingUser, 
-                        verification: {...editingUser.verification, verified: value === 'true'}
-                      })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="true">Đã xác minh</SelectItem>
-                        <SelectItem value="false">Chưa xác minh</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex justify-end gap-2">
-                  <Button variant="outline" onClick={() => setShowUserModal(false)}>
-                    Hủy
-                  </Button>
-                  <Button onClick={handleEditUser}>
-                    <Edit className="h-4 w-4 mr-2" />
-                    Cập nhật
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Delete Confirmation Dialog */}
-        <Dialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Xác nhận xóa</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p>Bạn có chắc chắn muốn xóa người dùng <strong>{userToDelete?.username}</strong>?</p>
-              <p className="text-sm text-gray-500 mt-2">Hành động này không thể hoàn tác.</p>
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setShowDeleteConfirm(false)}>
-                Hủy
-              </Button>
-              <Button variant="destructive" onClick={confirmDeleteUser}>
-                <Trash2 className="h-4 w-4 mr-2" />
-                Xóa
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Bank Edit Modal */}
-        <Dialog open={showBankModal} onOpenChange={setShowBankModal}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Sửa thông tin ngân hàng</DialogTitle>
-            </DialogHeader>
-            {editingBank && (
-              <div className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label>Tên ngân hàng</Label>
-                    <Input
-                      value={editingBank.name || ''}
-                      onChange={(e) => setEditingBank({...editingBank, name: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Số tài khoản</Label>
-                    <Input
-                      value={editingBank.accountNumber || ''}
-                      onChange={(e) => setEditingBank({...editingBank, accountNumber: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Chủ tài khoản</Label>
-                    <Input
-                      value={editingBank.accountHolder || ''}
-                      onChange={(e) => setEditingBank({...editingBank, accountHolder: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Chi nhánh</Label>
-                    <Input
-                      value={editingBank.branch || ''}
-                      onChange={(e) => setEditingBank({...editingBank, branch: e.target.value})}
-                    />
-                  </div>
-                  <div>
-                    <Label>Trạng thái</Label>
-                    <Select
-                      value={editingBank.status || 'active'}
-                      onValueChange={(value) => setEditingBank({...editingBank, status: value})}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="active">Hoạt động</SelectItem>
-                        <SelectItem value="inactive">Không hoạt động</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="flex gap-2 pt-4">
-                  <Button onClick={handleUpdateBank} className="flex-1">
-                    Cập nhật
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setShowBankModal(false)}
-                    className="flex-1"
-                  >
-                    Hủy
-                  </Button>
-                </div>
-              </div>
-            )}
-          </DialogContent>
-        </Dialog>
-
-        {/* Bank Delete Confirmation Dialog */}
-        <Dialog open={showBankDeleteConfirm} onOpenChange={setShowBankDeleteConfirm}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Xác nhận xóa ngân hàng</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-              <p>Bạn có chắc chắn muốn xóa ngân hàng này không?</p>
-              {bankToDelete && (
-                <div className="mt-4 p-3 bg-gray-100 rounded">
-                  <p><strong>Tên ngân hàng:</strong> {bankToDelete.name}</p>
-                  <p><strong>Số tài khoản:</strong> {bankToDelete.accountNumber}</p>
-                  <p><strong>Chủ tài khoản:</strong> {bankToDelete.accountHolder}</p>
-                </div>
-              )}
-            </div>
-            <div className="flex gap-2">
-              <Button 
-                variant="destructive" 
-                onClick={confirmDeleteBank}
-                className="flex-1"
-              >
-                Xóa
-              </Button>
-              <Button 
-                variant="outline" 
-                onClick={() => setShowBankDeleteConfirm(false)}
-                className="flex-1"
-              >
-                Hủy
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
       </main>
     </div>
   );

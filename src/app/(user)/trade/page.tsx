@@ -707,8 +707,6 @@ export default function TradePage() {
         </Dialog>
 
         <div className="max-w-7xl mx-auto">
-
-
           {/* Desktop Layout - Đặt lệnh bên trái, biểu đồ và lịch sử bên phải */}
           <div className="hidden lg:grid lg:grid-cols-12 gap-6">
             <div className="lg:col-span-4 space-y-6">

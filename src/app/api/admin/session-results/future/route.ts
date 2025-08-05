@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { requireAdmin } from '@/lib/auth-utils';
 import { NextRequest } from 'next/server';
+import { ObjectId } from 'mongodb';
 
 export async function GET(request: NextRequest) {
   return requireAdmin(request, async (req: NextRequest, user: any) => {
@@ -109,23 +110,104 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Cập nhật kết quả cho phiên tương lai
+        const now = new Date();
+        console.log(`👑 Admin đặt kết quả cho phiên ${sessionId}: ${result}`);
+
+        // Tìm tất cả lệnh của phiên này
+        const pendingTrades = await db.collection('trades').find({
+          sessionId: sessionId,
+          status: 'pending'
+        }).toArray();
+
+        console.log(`📋 Tìm thấy ${pendingTrades.length} lệnh cần xử lý`);
+
+        let totalWins = 0;
+        let totalLosses = 0;
+        let totalWinAmount = 0;
+        let totalLossAmount = 0;
+
+        // Xử lý từng lệnh ngay lập tức
+        for (const trade of pendingTrades) {
+          const isWin = trade.direction === result;
+          const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // Thắng được 90%
+
+          // Cập nhật lệnh
+          await db.collection('trades').updateOne(
+            { _id: trade._id },
+            { 
+              $set: { 
+                status: 'completed', 
+                result: isWin ? 'win' : 'lose', 
+                profit: profit,
+                updatedAt: now
+              }
+            }
+          );
+
+          // Cập nhật số dư user
+          if (isWin) {
+            // Thắng: trả lại tiền cược + lợi nhuận
+            await db.collection('users').updateOne(
+              { _id: new ObjectId(trade.userId) },
+              { 
+                $inc: { 
+                  'balance.available': profit + trade.amount,
+                  'balance.frozen': -trade.amount 
+                },
+                $set: { updatedAt: now }
+              }
+            );
+            totalWins++;
+            totalWinAmount += profit + trade.amount;
+            console.log(`💰 User ${trade.userId} thắng: +${profit + trade.amount} VND`);
+          } else {
+            // Thua: chỉ trừ tiền cược (đã bị đóng băng)
+            await db.collection('users').updateOne(
+              { _id: new ObjectId(trade.userId) },
+              { 
+                $inc: { 'balance.frozen': -trade.amount },
+                $set: { updatedAt: now }
+              }
+            );
+            totalLosses++;
+            totalLossAmount += trade.amount;
+            console.log(`💸 User ${trade.userId} thua: -${trade.amount} VND`);
+          }
+        }
+
+        // Cập nhật phiên thành COMPLETED ngay lập tức
         await db.collection('trading_sessions').updateOne(
           { sessionId },
           {
             $set: {
               result: result,
-              status: 'PREDICTED',
+              status: 'COMPLETED', // Đặt trực tiếp thành COMPLETED
+              actualResult: result,
               createdBy: 'admin',
-              updatedAt: new Date()
+              totalTrades: pendingTrades.length,
+              totalWins: totalWins,
+              totalLosses: totalLosses,
+              totalWinAmount: totalWinAmount,
+              totalLossAmount: totalLossAmount,
+              completedAt: now,
+              updatedAt: now
             }
           }
         );
 
+        console.log(`✅ Hoàn thành xử lý kết quả admin cho phiên ${sessionId}: ${totalWins} thắng, ${totalLosses} thua`);
+
         return NextResponse.json({
           success: true,
-          message: `Phiên ${sessionId} kết quả được đặt: ${result}`,
-          data: { sessionId, result, status: 'PREDICTED' }
+          message: `Phiên ${sessionId} kết quả được đặt: ${result} (${totalWins} thắng, ${totalLosses} thua)`,
+          data: { 
+            sessionId, 
+            result, 
+            status: 'COMPLETED',
+            totalTrades: pendingTrades.length,
+            totalWins,
+            totalLosses
+          }
         });
 
       } else if (action === 'bulk_set_future_results') {
@@ -155,18 +237,91 @@ export async function POST(request: NextRequest) {
 
           const session = await db.collection('trading_sessions').findOne({ sessionId });
           if (session) {
+            const now = new Date();
+            
+            // Tìm và xử lý tất cả lệnh của phiên này
+            const pendingTrades = await db.collection('trades').find({
+              sessionId: sessionId,
+              status: 'pending'
+            }).toArray();
+
+            let totalWins = 0;
+            let totalLosses = 0;
+            let totalWinAmount = 0;
+            let totalLossAmount = 0;
+
+            // Xử lý từng lệnh
+            for (const trade of pendingTrades) {
+              const isWin = trade.direction === result;
+              const profit = isWin ? Math.floor(trade.amount * 0.9) : 0;
+
+              // Cập nhật lệnh
+              await db.collection('trades').updateOne(
+                { _id: trade._id },
+                { 
+                  $set: { 
+                    status: 'completed', 
+                    result: isWin ? 'win' : 'lose', 
+                    profit: profit,
+                    updatedAt: now
+                  }
+                }
+              );
+
+              // Cập nhật số dư user
+              if (isWin) {
+                await db.collection('users').updateOne(
+                  { _id: new ObjectId(trade.userId) },
+                  { 
+                    $inc: { 
+                      'balance.available': profit + trade.amount,
+                      'balance.frozen': -trade.amount 
+                    },
+                    $set: { updatedAt: now }
+                  }
+                );
+                totalWins++;
+                totalWinAmount += profit + trade.amount;
+              } else {
+                await db.collection('users').updateOne(
+                  { _id: new ObjectId(trade.userId) },
+                  { 
+                    $inc: { 'balance.frozen': -trade.amount },
+                    $set: { updatedAt: now }
+                  }
+                );
+                totalLosses++;
+                totalLossAmount += trade.amount;
+              }
+            }
+
+            // Cập nhật phiên thành COMPLETED
             await db.collection('trading_sessions').updateOne(
               { sessionId },
               {
                 $set: {
                   result: result,
-                  status: 'PREDICTED',
+                  status: 'COMPLETED',
+                  actualResult: result,
                   createdBy: 'admin',
-                  updatedAt: new Date()
+                  totalTrades: pendingTrades.length,
+                  totalWins: totalWins,
+                  totalLosses: totalLosses,
+                  totalWinAmount: totalWinAmount,
+                  totalLossAmount: totalLossAmount,
+                  completedAt: now,
+                  updatedAt: now
                 }
               }
             );
-            updateResults.push({ sessionId, result });
+
+            updateResults.push({ 
+              sessionId, 
+              result, 
+              totalTrades: pendingTrades.length,
+              totalWins,
+              totalLosses
+            });
           }
         }
 
@@ -193,18 +348,91 @@ export async function POST(request: NextRequest) {
             const random = Math.random();
             const randomResult = random < 0.6 ? 'UP' : 'DOWN';
 
+            const now = new Date();
+            
+            // Tìm và xử lý tất cả lệnh của phiên này
+            const pendingTrades = await db.collection('trades').find({
+              sessionId: sessionId,
+              status: 'pending'
+            }).toArray();
+
+            let totalWins = 0;
+            let totalLosses = 0;
+            let totalWinAmount = 0;
+            let totalLossAmount = 0;
+
+            // Xử lý từng lệnh
+            for (const trade of pendingTrades) {
+              const isWin = trade.direction === randomResult;
+              const profit = isWin ? Math.floor(trade.amount * 0.9) : 0;
+
+              // Cập nhật lệnh
+              await db.collection('trades').updateOne(
+                { _id: trade._id },
+                { 
+                  $set: { 
+                    status: 'completed', 
+                    result: isWin ? 'win' : 'lose', 
+                    profit: profit,
+                    updatedAt: now
+                  }
+                }
+              );
+
+              // Cập nhật số dư user
+              if (isWin) {
+                await db.collection('users').updateOne(
+                  { _id: new ObjectId(trade.userId) },
+                  { 
+                    $inc: { 
+                      'balance.available': profit + trade.amount,
+                      'balance.frozen': -trade.amount 
+                    },
+                    $set: { updatedAt: now }
+                  }
+                );
+                totalWins++;
+                totalWinAmount += profit + trade.amount;
+              } else {
+                await db.collection('users').updateOne(
+                  { _id: new ObjectId(trade.userId) },
+                  { 
+                    $inc: { 'balance.frozen': -trade.amount },
+                    $set: { updatedAt: now }
+                  }
+                );
+                totalLosses++;
+                totalLossAmount += trade.amount;
+              }
+            }
+
+            // Cập nhật phiên thành COMPLETED
             await db.collection('trading_sessions').updateOne(
               { sessionId },
               {
                 $set: {
                   result: randomResult,
-                  status: 'PREDICTED',
-                  createdBy: 'system',
-                  updatedAt: new Date()
+                  status: 'COMPLETED',
+                  actualResult: randomResult,
+                  createdBy: 'admin',
+                  totalTrades: pendingTrades.length,
+                  totalWins: totalWins,
+                  totalLosses: totalLosses,
+                  totalWinAmount: totalWinAmount,
+                  totalLossAmount: totalLossAmount,
+                  completedAt: now,
+                  updatedAt: now
                 }
               }
             );
-            updateResults.push({ sessionId, result: randomResult });
+
+            updateResults.push({ 
+              sessionId, 
+              result: randomResult, 
+              totalTrades: pendingTrades.length,
+              totalWins,
+              totalLosses
+            });
           }
         }
 
@@ -233,7 +461,7 @@ export async function POST(request: NextRequest) {
       }
 
     } catch (error) {
-      console.error('Error managing future sessions:', error);
+      console.error('Error setting future results:', error);
       return NextResponse.json(
         { success: false, message: 'Internal server error' },
         { status: 500 }

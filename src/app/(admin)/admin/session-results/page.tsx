@@ -5,12 +5,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast, useToast } from '@/components/ui/use-toast';
 import { useAuth } from '@/lib/useAuth';
 import { useRouter } from 'next/navigation';
-import { Clock, TrendingUp, TrendingDown, CheckCircle, XCircle, AlertCircle, Settings, RefreshCw, Zap, AlertTriangle } from 'lucide-react';
+import { TrendingUp, TrendingDown, Settings, RefreshCw, Zap, Target } from 'lucide-react';
 
 interface SessionResult {
   _id: string;
@@ -37,18 +37,11 @@ export default function SessionResultsPage() {
   const { toast } = useToast();
 
   // States
-  const [sessions, setSessions] = useState<SessionResult[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [futureSessions, setFutureSessions] = useState<SessionResult[]>([]);
+  const [loadingFuture, setLoadingFuture] = useState(false);
   const [selectedSession, setSelectedSession] = useState<SessionResult | null>(null);
   const [showSetResultDialog, setShowSetResultDialog] = useState(false);
   const [selectedResult, setSelectedResult] = useState<'UP' | 'DOWN'>('UP');
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const [totalSessions, setTotalSessions] = useState(0);
-  const [searchSessionId, setSearchSessionId] = useState('');
-  const [searchStatus, setSearchStatus] = useState('all');
-  const [searchDateFrom, setSearchDateFrom] = useState('');
-  const [searchDateTo, setSearchDateTo] = useState('');
 
   // Check authentication and admin access
   useEffect(() => {
@@ -75,25 +68,17 @@ export default function SessionResultsPage() {
     }
   }, [isLoading, isAuthenticated, isAdmin, router, toast]);
 
-  // Load sessions
+  // Load future sessions when component mounts
   useEffect(() => {
     if (isAuthenticated() && isAdmin()) {
-      loadSessions();
+      loadFutureSessions();
     }
-  }, [currentPage, searchSessionId, searchStatus, searchDateFrom, searchDateTo]);
+  }, []);
 
-  const loadSessions = async () => {
+  const loadFutureSessions = async () => {
     try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      params.append('page', currentPage.toString());
-      params.append('limit', '10');
-      if (searchSessionId) params.append('sessionId', searchSessionId);
-      if (searchStatus && searchStatus !== 'all') params.append('status', searchStatus);
-      if (searchDateFrom) params.append('startDate', searchDateFrom);
-      if (searchDateTo) params.append('endDate', searchDateTo);
-
-      const response = await fetch(`/api/admin/session-results?${params.toString()}`, {
+      setLoadingFuture(true);
+      const response = await fetch('/api/admin/session-results/future', {
         credentials: 'include',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
@@ -103,26 +88,18 @@ export default function SessionResultsPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.success) {
-          setSessions(data.data.sessions);
-          setTotalPages(data.data.pagination.totalPages);
-          setTotalSessions(data.data.pagination.total);
+          setFutureSessions(data.data.sessions);
         } else {
-          setSessions([]);
-          setTotalPages(1);
-          setTotalSessions(0);
+          setFutureSessions([]);
         }
       } else {
-        setSessions([]);
-        setTotalPages(1);
-        setTotalSessions(0);
+        setFutureSessions([]);
       }
     } catch (error) {
-      console.error('Error loading sessions:', error);
-      setSessions([]);
-      setTotalPages(1);
-      setTotalSessions(0);
+      console.error('Error loading future sessions:', error);
+      setFutureSessions([]);
     } finally {
-      setLoading(false);
+      setLoadingFuture(false);
     }
   };
 
@@ -130,14 +107,14 @@ export default function SessionResultsPage() {
     if (!selectedSession || !selectedResult) return;
 
     try {
-      const response = await fetch('/api/admin/session-results', {
+      const response = await fetch('/api/admin/session-results/future', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          action: 'set_result',
+          action: 'set_future_result',
           sessionId: selectedSession.sessionId,
           result: selectedResult
         })
@@ -150,7 +127,7 @@ export default function SessionResultsPage() {
           description: data.message,
         });
         setShowSetResultDialog(false);
-        loadSessions();
+        loadFutureSessions();
       } else {
         toast({
           title: 'Lỗi',
@@ -170,15 +147,15 @@ export default function SessionResultsPage() {
 
   const handleGenerateRandom = async (sessionId: string) => {
     try {
-      const response = await fetch('/api/admin/session-results', {
+      const response = await fetch('/api/admin/session-results/future', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          action: 'generate_random',
-          sessionId: sessionId
+          action: 'bulk_random_results',
+          sessionIds: [sessionId]
         })
       });
 
@@ -188,7 +165,7 @@ export default function SessionResultsPage() {
           title: 'Thành công',
           description: data.message,
         });
-        loadSessions();
+        loadFutureSessions();
       } else {
         toast({
           title: 'Lỗi',
@@ -207,30 +184,16 @@ export default function SessionResultsPage() {
   };
 
   const handleBulkGenerate = async () => {
-    const activeSessions = sessions.filter(s => s.status === 'ACTIVE');
-    if (activeSessions.length === 0) {
-      toast({
-        title: 'Thông báo',
-        description: 'Không có phiên nào cần tạo kết quả',
-      });
-      return;
-    }
-
-    // Hiển thị thông báo xác nhận
-    if (!confirm(`Bạn có chắc muốn random kết quả cho ${activeSessions.length} phiên giao dịch?`)) {
-      return;
-    }
-
     try {
-      const response = await fetch('/api/admin/session-results', {
+      const response = await fetch('/api/admin/session-results/future', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         },
         body: JSON.stringify({
-          action: 'bulk_generate',
-          sessionIds: activeSessions.map(s => s.sessionId)
+          action: 'bulk_random_results',
+          sessionIds: futureSessions.filter(s => s.status === 'ACTIVE').map(s => s.sessionId)
         })
       });
 
@@ -238,9 +201,9 @@ export default function SessionResultsPage() {
       if (data.success) {
         toast({
           title: 'Thành công',
-          description: `Đã random kết quả cho ${data.data.results.length} phiên giao dịch`,
+          description: data.message,
         });
-        loadSessions();
+        loadFutureSessions();
       } else {
         toast({
           title: 'Lỗi',
@@ -258,14 +221,53 @@ export default function SessionResultsPage() {
     }
   };
 
+  const handleBulkSetResults = async (sessionIds: string[], result: 'UP' | 'DOWN') => {
+    try {
+      const response = await fetch('/api/admin/session-results/future', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({
+          action: 'bulk_set_future_results',
+          sessionIds: sessionIds,
+          results: sessionIds.map(() => result)
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        toast({
+          title: 'Thành công',
+          description: data.message,
+        });
+        loadFutureSessions();
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: data.message,
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error bulk setting results:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể đặt kết quả hàng loạt',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'ACTIVE':
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800"><Clock className="w-3 h-3 mr-1" />Đang hoạt động</Badge>;
+        return <Badge className="bg-green-100 text-green-800">Đang hoạt động</Badge>;
       case 'PREDICTED':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800"><Settings className="w-3 h-3 mr-1" />Đã dự đoán</Badge>;
+        return <Badge className="bg-yellow-100 text-yellow-800">Đã dự đoán</Badge>;
       case 'COMPLETED':
-        return <Badge variant="secondary" className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Đã hoàn thành</Badge>;
+        return <Badge className="bg-blue-100 text-blue-800">Đã hoàn thành</Badge>;
       default:
         return <Badge variant="outline">{status}</Badge>;
     }
@@ -273,32 +275,33 @@ export default function SessionResultsPage() {
 
   const getResultBadge = (result?: string) => {
     if (!result) return <Badge variant="outline">Chưa có</Badge>;
-    return result === 'UP' ? 
-      <Badge className="bg-green-500 text-white"><TrendingUp className="w-3 h-3 mr-1" />LÊN</Badge> :
-      <Badge className="bg-red-500 text-white"><TrendingDown className="w-3 h-3 mr-1" />XUỐNG</Badge>;
+    return result === 'UP' 
+      ? <Badge className="bg-green-100 text-green-800 flex items-center gap-1"><TrendingUp className="w-3 h-3" />LÊN</Badge>
+      : <Badge className="bg-red-100 text-red-800 flex items-center gap-1"><TrendingDown className="w-3 h-3" />XUỐNG</Badge>;
   };
 
   const getCreatedByBadge = (createdBy?: string) => {
     if (!createdBy) return <Badge variant="outline">Hệ thống</Badge>;
-    return createdBy === 'admin' ? 
-      <Badge className="bg-purple-500 text-white">Admin</Badge> :
-      <Badge className="bg-gray-500 text-white">Hệ thống</Badge>;
+    return createdBy === 'admin' 
+      ? <Badge className="bg-purple-100 text-purple-800">Admin</Badge>
+      : <Badge className="bg-gray-100 text-gray-800">Hệ thống</Badge>;
   };
 
-  if (loading) {
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex justify-between items-center">
+    <div className="space-y-6 p-6">
+      {/* Header */}
+      <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Quản lý kết quả phiên giao dịch</h1>
-          <p className="text-gray-600 mt-2">Quản lý và thiết lập kết quả cho các phiên giao dịch</p>
+          <p className="text-gray-600 mt-2">Quản lý 30 phiên giao dịch tương lai với độ chính xác 100%</p>
         </div>
         <div className="flex gap-3">
           <Button onClick={handleBulkGenerate} className="bg-blue-600 hover:bg-blue-700">
@@ -306,194 +309,150 @@ export default function SessionResultsPage() {
             Random kết quả hàng loạt
           </Button>
           <Button 
-            onClick={() => router.push('/admin/session-results/future')}
-            className="bg-green-600 hover:bg-green-700"
+            onClick={loadFutureSessions}
+            variant="outline"
+            className="border-green-300 text-green-700 hover:bg-green-50"
           >
-            <AlertTriangle className="w-4 h-4 mr-2" />
-            30 phiên tương lai (100%)
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Làm mới
           </Button>
         </div>
       </div>
 
-      {/* Search and Filters */}
-      <Card>
+      {/* Future Sessions Section */}
+      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
         <CardHeader>
-          <CardTitle className="text-lg">Tìm kiếm và lọc</CardTitle>
+          <CardTitle className="flex items-center gap-2 text-green-800">
+            <Target className="h-5 w-5" />
+            30 phiên giao dịch tương lai (Độ chính xác 100%)
+          </CardTitle>
+          <CardDescription className="text-green-700">
+            Quản lý kết quả cho 30 phiên giao dịch sắp tới với độ chính xác 100%
+          </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Mã phiên:</label>
-              <input
-                type="text"
-                placeholder="Nhập mã phiên..."
-                value={searchSessionId}
-                onChange={(e) => setSearchSessionId(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Trạng thái:</label>
-              <Select value={searchStatus} onValueChange={setSearchStatus}>
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Tất cả trạng thái" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Tất cả trạng thái</SelectItem>
-                  <SelectItem value="ACTIVE">Đang hoạt động</SelectItem>
-                  <SelectItem value="PREDICTED">Đã dự đoán</SelectItem>
-                  <SelectItem value="COMPLETED">Đã hoàn thành</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Từ ngày:</label>
-              <input
-                type="date"
-                value={searchDateFrom}
-                onChange={(e) => setSearchDateFrom(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label className="text-sm font-medium text-gray-700">Đến ngày:</label>
-              <input
-                type="date"
-                value={searchDateTo}
-                onChange={(e) => setSearchDateTo(e.target.value)}
-                className="w-full mt-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+          {/* Bulk Actions */}
+          <div className="mb-6 p-4 bg-white rounded-lg border border-green-200">
+            <h3 className="font-semibold text-green-800 mb-3">Thao tác hàng loạt:</h3>
+            <div className="flex flex-wrap gap-3">
+              <Button 
+                onClick={() => {
+                  const activeSessionIds = futureSessions.filter(s => s.status === 'ACTIVE').map(s => s.sessionId);
+                  if (activeSessionIds.length > 0) {
+                    handleBulkSetResults(activeSessionIds, 'UP');
+                  }
+                }}
+                className="bg-green-600 hover:bg-green-700"
+              >
+                <TrendingUp className="w-4 h-4 mr-2" />
+                Đặt tất cả LÊN
+              </Button>
+              <Button 
+                onClick={() => {
+                  const activeSessionIds = futureSessions.filter(s => s.status === 'ACTIVE').map(s => s.sessionId);
+                  if (activeSessionIds.length > 0) {
+                    handleBulkSetResults(activeSessionIds, 'DOWN');
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                <TrendingDown className="w-4 h-4 mr-2" />
+                Đặt tất cả XUỐNG
+              </Button>
+              <Button 
+                onClick={handleBulkGenerate}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Random tất cả
+              </Button>
             </div>
           </div>
-          <div className="flex justify-between items-center mt-4">
-            <div className="text-sm text-gray-600">
-              Tìm thấy {totalSessions} phiên giao dịch
-            </div>
-            <div className="text-sm text-gray-600">
-              Trang {currentPage} / {totalPages}
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Sessions Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Danh sách phiên giao dịch</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Mã phiên</TableHead>
-                  <TableHead>Thời gian bắt đầu</TableHead>
-                  <TableHead>Thời gian kết thúc</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Kết quả dự đoán</TableHead>
-                  <TableHead>Kết quả thực tế</TableHead>
-                  <TableHead>Người tạo</TableHead>
-                  <TableHead>Thống kê</TableHead>
-                  <TableHead>Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((session) => (
-                  <TableRow key={session._id}>
-                    <TableCell className="font-mono text-sm">{session.sessionId}</TableCell>
-                    <TableCell>{new Date(session.startTime).toLocaleString('vi-VN')}</TableCell>
-                    <TableCell>{new Date(session.endTime).toLocaleString('vi-VN')}</TableCell>
-                    <TableCell>{getStatusBadge(session.status)}</TableCell>
-                    <TableCell>{getResultBadge(session.result)}</TableCell>
-                    <TableCell>{getResultBadge(session.actualResult)}</TableCell>
-                    <TableCell>{getCreatedByBadge(session.createdBy)}</TableCell>
-                    <TableCell>
-                      <div className="text-xs space-y-1">
-                        <div>Tổng lệnh: {session.totalTrades || 0}</div>
-                        <div>Thắng: {session.totalWins || 0}</div>
-                        <div>Thua: {session.totalLosses || 0}</div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {session.status === 'ACTIVE' && (
-                          <>
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedSession(session);
-                                setShowSetResultDialog(true);
-                              }}
-                              className="bg-blue-600 hover:bg-blue-700"
-                            >
-                              <Settings className="w-3 h-3 mr-1" />
-                              Đặt kết quả
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => handleGenerateRandom(session.sessionId)}
-                            >
-                              <RefreshCw className="w-3 h-3 mr-1" />
-                              Random
-                            </Button>
-                          </>
-                        )}
-                        {session.status === 'PREDICTED' && (
-                          <Badge variant="outline" className="text-xs">
-                            Đã có kết quả
-                          </Badge>
-                        )}
-                        {session.status === 'COMPLETED' && (
-                          <Badge variant="outline" className="text-xs">
-                            Đã hoàn thành
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
+          {/* Future Sessions Table */}
+          {loadingFuture ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-green-600"></div>
+              <span className="ml-2 text-green-700">Đang tải 30 phiên tương lai...</span>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="bg-green-50">
+                    <TableHead className="text-green-800">Mã phiên</TableHead>
+                    <TableHead className="text-green-800">Thời gian bắt đầu</TableHead>
+                    <TableHead className="text-green-800">Thời gian kết thúc</TableHead>
+                    <TableHead className="text-green-800">Trạng thái</TableHead>
+                    <TableHead className="text-green-800">Kết quả</TableHead>
+                    <TableHead className="text-green-800">Người tạo</TableHead>
+                    <TableHead className="text-green-800">Thao tác</TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="mt-4 flex justify-center">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
-                  disabled={currentPage === 1}
-                >
-                  Trước
-                </Button>
-                
-                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                  const pageNum = Math.max(1, Math.min(totalPages - 4, currentPage - 2)) + i;
-                  if (pageNum > totalPages) return null;
-                  
-                  return (
-                    <Button
-                      key={pageNum}
-                      variant={pageNum === currentPage ? "default" : "outline"}
-                      onClick={() => setCurrentPage(pageNum)}
-                    >
-                      {pageNum}
-                    </Button>
-                  );
-                })}
-                
-                <Button
-                  variant="outline"
-                  onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
-                  disabled={currentPage === totalPages}
-                >
-                  Sau
-                </Button>
-              </div>
+                </TableHeader>
+                <TableBody>
+                  {futureSessions.map((session) => (
+                    <TableRow key={session._id} className="hover:bg-green-50">
+                      <TableCell className="font-mono text-sm font-semibold">{session.sessionId}</TableCell>
+                      <TableCell>{new Date(session.startTime).toLocaleString('vi-VN')}</TableCell>
+                      <TableCell>{new Date(session.endTime).toLocaleString('vi-VN')}</TableCell>
+                      <TableCell>{getStatusBadge(session.status)}</TableCell>
+                      <TableCell>{getResultBadge(session.result)}</TableCell>
+                      <TableCell>{getCreatedByBadge(session.createdBy)}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-2">
+                          {session.status === 'ACTIVE' && (
+                            <>
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedSession(session);
+                                  setShowSetResultDialog(true);
+                                }}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Settings className="w-3 h-3 mr-1" />
+                                Đặt kết quả
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleGenerateRandom(session.sessionId)}
+                                className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                              >
+                                <RefreshCw className="w-3 h-3 mr-1" />
+                                Random
+                              </Button>
+                            </>
+                          )}
+                          {session.status === 'PREDICTED' && (
+                            <Badge variant="outline" className="text-xs bg-yellow-50 text-yellow-700">
+                              Đã có kết quả
+                            </Badge>
+                          )}
+                          {session.status === 'COMPLETED' && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">
+                              Đã hoàn thành
+                            </Badge>
+                          )}
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
             </div>
           )}
+
+          {/* Future Sessions Info */}
+          <div className="mt-4 p-4 bg-white rounded-lg border border-green-200">
+            <h4 className="font-semibold text-green-800 mb-2">Thông tin quan trọng:</h4>
+            <ul className="text-sm text-green-700 space-y-1">
+              <li>• <strong>Độ chính xác 100%:</strong> Kết quả bạn đặt sẽ được sử dụng chính xác khi phiên kết thúc</li>
+              <li>• <strong>Xử lý ngay lập tức:</strong> Khi đặt kết quả, tất cả lệnh sẽ được xử lý ngay lập tức</li>
+              <li>• <strong>30 phiên tương lai:</strong> Hệ thống tự động tạo và quản lý 30 phiên giao dịch sắp tới</li>
+              <li>• <strong>Quản lý hàng loạt:</strong> Có thể đặt kết quả cho nhiều phiên cùng lúc</li>
+            </ul>
+          </div>
         </CardContent>
       </Card>
 
@@ -530,39 +489,6 @@ export default function SessionResultsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      {/* Future Sessions Link */}
-      <Card className="mt-6 bg-gradient-to-r from-green-50 to-emerald-50 border-green-200">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-green-800">
-            <AlertTriangle className="h-5 w-5" />
-            Quản lý 30 phiên giao dịch tương lai
-          </CardTitle>
-          <CardDescription className="text-green-700">
-            Đặt kết quả chính xác 100% cho 30 phiên giao dịch sắp tới
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            <p className="text-sm text-green-700">
-              • <strong>Độ chính xác 100%:</strong> Kết quả bạn đặt sẽ được sử dụng chính xác khi phiên kết thúc
-            </p>
-            <p className="text-sm text-green-700">
-              • <strong>30 phiên tương lai:</strong> Hệ thống tự động tạo 30 phiên giao dịch sắp tới
-            </p>
-            <p className="text-sm text-green-700">
-              • <strong>Quản lý hàng loạt:</strong> Có thể đặt kết quả cho nhiều phiên cùng lúc
-            </p>
-            <Button 
-              onClick={() => window.open('/admin/session-results/future', '_blank')}
-              className="bg-green-600 hover:bg-green-700 w-full"
-            >
-              <AlertTriangle className="h-4 w-4 mr-2" />
-              Mở trang quản lý 30 phiên tương lai
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 } 

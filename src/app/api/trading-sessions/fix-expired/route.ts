@@ -64,15 +64,16 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Tìm tất cả phiên PREDICTED đã kết thúc và chưa được xử lý
+    // Tìm tất cả phiên PREDICTED đã kết thúc và chưa được xử lý (chỉ xử lý phiên không có kết quả admin)
     const expiredPredictedSessions = await db.collection('trading_sessions').find({
       status: 'PREDICTED',
-      endTime: { $lte: now }
+      endTime: { $lte: now },
+      createdBy: { $ne: 'admin' } // Chỉ xử lý phiên không có kết quả admin
     }).toArray();
 
-    console.log(`🔍 Tìm thấy ${expiredPredictedSessions.length} phiên PREDICTED đã kết thúc`);
+    console.log(`🔍 Tìm thấy ${expiredPredictedSessions.length} phiên PREDICTED đã kết thúc (không có kết quả admin)`);
 
-    // Xử lý các phiên PREDICTED đã kết thúc
+    // Xử lý các phiên PREDICTED đã kết thúc (chỉ phiên không có kết quả admin)
     for (const session of expiredPredictedSessions) {
       try {
         const sessionResult = session.result;

@@ -27,104 +27,21 @@ export async function GET(request: NextRequest) {
     const sessionEnded = currentSession && currentSession.endTime <= now;
     const sessionChanged = sessionEnded || !currentSession;
 
-    // Nếu phiên đã kết thúc, tự động sửa các phiên đã kết thúc trước đó
-    if (sessionEnded) {
+    // Nếu phiên đã kết thúc và không có kết quả admin, gọi fix-expired để xử lý
+    if (sessionEnded && (!currentSession || currentSession.createdBy !== 'admin')) {
+      console.log(`⏰ Phiên ${sessionId} đã kết thúc, gọi fix-expired để xử lý`);
       try {
         const fixResponse = await fetch(`${request.nextUrl.origin}/api/trading-sessions/fix-expired`);
         if (fixResponse.ok) {
           const fixData = await fixResponse.json();
+          console.log(`✅ Đã gọi fix-expired cho phiên ${sessionId}`);
         }
       } catch (error) {
+        console.error(`❌ Lỗi khi gọi fix-expired cho phiên ${sessionId}:`, error);
       }
     }
 
     if (sessionChanged) {
-
-      // Nếu phiên cũ đã kết thúc và có trạng thái PREDICTED, xử lý kết quả
-      if (sessionEnded && currentSession && currentSession.status === 'PREDICTED') {
-        const oldSessionId = currentSession.sessionId;
-        const sessionResult = currentSession.result;
-
-
-        // Tìm tất cả lệnh của phiên đã kết thúc
-        const pendingTrades = await db.collection('trades').find({
-          sessionId: oldSessionId,
-          status: 'pending'
-        }).toArray();
-
-
-        // Thống kê kết quả
-        let totalWins = 0;
-        let totalLosses = 0;
-        let totalWinAmount = 0;
-        let totalLossAmount = 0;
-
-        // Cập nhật kết quả cho từng lệnh
-        for (const trade of pendingTrades) {
-          const isWin = trade.direction === sessionResult;
-          const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 10 ăn 9
-
-          const updateData = {
-            status: 'completed',
-            result: isWin ? 'win' : 'lose',
-            profit: profit,
-            completedAt: now,
-            updatedAt: now
-          };
-
-          await db.collection('trades').updateOne(
-            { _id: trade._id },
-            { $set: updateData }
-          );
-
-          // Cập nhật số dư người dùng
-          const user = await db.collection('users').findOne({ _id: trade.userId });
-          if (user) {
-            let currentBalance = user.balance || 0;
-            let newBalance = currentBalance;
-            
-            if (isWin) {
-              // Thắng: cộng tiền thắng (tiền cược + lợi nhuận)
-              newBalance += trade.amount + profit;
-              totalWins++;
-              totalWinAmount += trade.amount + profit;
-            } else {
-              // Thua: trừ tiền cược (vì không trừ khi đặt lệnh)
-              newBalance -= trade.amount;
-              totalLosses++;
-              totalLossAmount += trade.amount;
-            }
-
-            await db.collection('users').updateOne(
-              { _id: trade.userId },
-              { 
-                $set: { 
-                  balance: newBalance,
-                  updatedAt: now
-                }
-              }
-            );
-          }
-        }
-
-        // Chuyển phiên từ PREDICTED sang COMPLETED sau khi xử lý xong
-        await db.collection('trading_sessions').updateOne(
-          { sessionId: oldSessionId },
-          { 
-            $set: { 
-              status: 'COMPLETED',
-              totalTrades: pendingTrades.length,
-              totalWins: totalWins,
-              totalLosses: totalLosses,
-              totalWinAmount: totalWinAmount,
-              totalLossAmount: totalLossAmount,
-              completedAt: now,
-              updatedAt: now
-            }
-          }
-        );
-      }
-
       // Tạo phiên mới nếu cần
       if (!currentSession || sessionEnded) {
         const newSession = {
