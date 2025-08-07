@@ -338,18 +338,6 @@ export default function TradePage() {
             if (resultData.hasResult) {
               // Có kết quả rồi, nhưng không cập nhật UI ngay (để giữ kịch tính)
               console.log('🎯 Có kết quả ngay lập tức, nhưng chờ 12s để tạo kịch tính');
-              
-              // Hiển thị thông báo nếu kết quả được tạo random
-              if (resultData.isRandom) {
-                console.log('🎲 Kết quả được tạo random do không có kết quả từ admin');
-                // Có thể hiển thị toast nhỏ để thông báo
-                toast({
-                  title: '🎲 Kết quả tự động',
-                  description: 'Kết quả được tạo tự động để đảm bảo hệ thống hoạt động',
-                  duration: 3000,
-                });
-              }
-              
               return true; // Trả về true để dừng polling
             }
           }
