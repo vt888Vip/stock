@@ -27,22 +27,8 @@ export async function GET(request: NextRequest) {
     const sessionEnded = currentSession && currentSession.endTime <= now;
     const sessionChanged = sessionEnded || !currentSession;
 
-    // Nếu phiên đã kết thúc và không có kết quả admin, gọi fix-expired để xử lý
-    if (sessionEnded && (!currentSession || currentSession.createdBy !== 'admin')) {
-      console.log(`⏰ Phiên ${sessionId} đã kết thúc, gọi fix-expired để xử lý`);
-      try {
-        const fixResponse = await fetch(`${request.nextUrl.origin}/api/trading-sessions/fix-expired`);
-        if (fixResponse.ok) {
-          const fixData = await fixResponse.json();
-          console.log(`✅ Đã gọi fix-expired cho phiên ${sessionId}`);
-        }
-      } catch (error) {
-        console.error(`❌ Lỗi khi gọi fix-expired cho phiên ${sessionId}:`, error);
-      }
-    }
-
     if (sessionChanged) {
-      // Tạo phiên mới nếu cần
+      // ✅ BẬT LẠI: Tạo phiên mới nếu cần
       if (!currentSession || sessionEnded) {
         const newSession = {
           sessionId,
@@ -54,9 +40,10 @@ export async function GET(request: NextRequest) {
           updatedAt: now
         };
 
-        // Tạo phiên mới (không xóa phiên cũ)
+        // ✅ BẬT LẠI: Tạo phiên mới (không xóa phiên cũ)
         await db.collection('trading_sessions').insertOne(newSession);
         currentSession = newSession as any;
+        console.log('✅ Đã tạo phiên mới trong session-change');
       }
     }
 

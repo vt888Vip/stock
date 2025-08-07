@@ -37,9 +37,29 @@ export async function GET(request: NextRequest) {
       currentMinute: currentMinute.toISOString()
     });
 
-    // Kiểm tra xem phiên hiện tại có kết thúc chưa
+    // ⚡ TỰ ĐỘNG XỬ LÝ KẾT QUẢ NGAY KHI PHIÊN KẾT THÚC
     if (currentSession && currentSession.endTime <= now) {
-      console.log('⏰ Phiên hiện tại đã kết thúc, sẽ được xử lý bởi processExpiredSessions');
+      console.log('⏰ Phiên hiện tại đã kết thúc, xử lý kết quả ngay lập tức');
+      
+      // Nếu có kết quả sẵn, xử lý ngay
+      if (currentSession.result) {
+        try {
+          // Gọi API xử lý kết quả
+          const processResponse = await fetch(`${request.nextUrl.origin}/api/trading-sessions/process-result`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ sessionId: currentSession.sessionId })
+          });
+          
+          if (processResponse.ok) {
+            console.log('✅ Đã xử lý kết quả phiên ngay lập tức');
+          }
+        } catch (error) {
+          console.error('❌ Lỗi khi xử lý kết quả ngay lập tức:', error);
+        }
+      }
       
       // Cập nhật currentSession với dữ liệu mới (nếu đã được xử lý)
       currentSession = await db.collection('trading_sessions').findOne({ 

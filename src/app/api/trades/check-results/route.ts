@@ -24,19 +24,65 @@ export async function POST(req: Request) {
 
     const db = await getMongoDb();
     
-    // Lấy kết quả phiên từ trading_sessions
-    const session = await db.collection('trading_sessions').findOne({ sessionId });
+    // ⚡ TỐI ƯU: Lấy kết quả phiên từ trading_sessions với index
+    const session = await db.collection('trading_sessions').findOne(
+      { sessionId },
+      { projection: { result: 1, status: 1, actualResult: 1, endTime: 1 } } // Thêm endTime để kiểm tra
+    );
+    
     if (!session) {
-      return NextResponse.json({ message: 'Session not found' }, { status: 404 });
+      return NextResponse.json({ 
+        hasResult: false, 
+        message: 'Session not found',
+        shouldRetry: true 
+      });
     }
 
-    // Nếu chưa có kết quả
+    // Kiểm tra xem phiên đã kết thúc chưa
+    const now = new Date();
+    const sessionEnded = session.endTime && session.endTime <= now;
+    
+    // ⚡ RANDOM KẾT QUẢ: Nếu chưa có kết quả và phiên đã kết thúc
+    if (!session.result && sessionEnded) {
+      console.log(`🎲 Session ${sessionId} đã kết thúc nhưng chưa có kết quả, tạo kết quả random`);
+      
+      // Tạo kết quả random (50% UP, 50% DOWN)
+      const randomResult = Math.random() < 0.5 ? 'UP' : 'DOWN';
+      
+      // Cập nhật session với kết quả random
+      await db.collection('trading_sessions').updateOne(
+        { sessionId },
+        { 
+          $set: { 
+            result: randomResult,
+            actualResult: randomResult,
+            status: 'COMPLETED',
+            completedAt: now,
+            updatedAt: now,
+            createdBy: 'system_random'
+          }
+        }
+      );
+      
+      console.log(`🎲 Đã tạo kết quả random: ${randomResult} cho session ${sessionId}`);
+      
+      // Cập nhật session object để sử dụng kết quả mới
+      session.result = randomResult;
+      session.actualResult = randomResult;
+      session.status = 'COMPLETED';
+    }
+
+    // Nếu chưa có kết quả (phiên chưa kết thúc)
     if (!session.result) {
-      return NextResponse.json({ hasResult: false });
+      return NextResponse.json({ 
+        hasResult: false,
+        sessionEnded,
+        shouldRetry: !sessionEnded // Chỉ retry nếu phiên chưa kết thúc
+      });
     }
 
-    // Cập nhật tất cả các lệnh chưa có kết quả cho phiên này
-    const trades = await db.collection('trades')
+    // ⚡ TỐI ƯU: Cập nhật tất cả các lệnh chưa có kết quả cho phiên này với bulk operation
+    const pendingTrades = await db.collection('trades')
       .find({ 
         sessionId,
         status: 'pending',
@@ -44,132 +90,90 @@ export async function POST(req: Request) {
       })
       .toArray();
 
-    // Cập nhật từng lệnh một cách tuần tự
-    for (const trade of trades) {
-      const isWin = trade.direction.toLowerCase() === session.result?.toLowerCase();
-      const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 90% tiền thắng (10 ăn 9)
-      
-      // Cập nhật trạng thái lệnh
-      await db.collection('trades').updateOne(
-        { _id: trade._id },
-        {
-          $set: {
-            status: 'completed',
-            result: isWin ? 'win' : 'lose',
-            profit,
-            updatedAt: new Date()
-          }
-        }
-      );
+    if (pendingTrades.length > 0) {
+      // ⚡ TỐI ƯU: Sử dụng bulk operations để cập nhật nhanh hơn
+      const bulkOps = [];
+      const userUpdates = new Map<string, { available: number; frozen: number }>();
 
-      // Cập nhật số dư tài khoản
-      if (isWin) {
-        await db.collection('users').updateOne(
-          { _id: trade.userId },
-          {
-            $inc: {
-              'balance.available': trade.amount + profit, // Trả lại tiền cược + tiền thắng
-              'balance.frozen': -trade.amount
+      for (const trade of pendingTrades) {
+        const isWin = trade.direction.toLowerCase() === session.result?.toLowerCase();
+        const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 90% tiền thắng (10 ăn 9)
+        
+        // Cập nhật trạng thái lệnh
+        bulkOps.push({
+          updateOne: {
+            filter: { _id: trade._id },
+            update: {
+              $set: {
+                status: 'completed',
+                result: isWin ? 'win' : 'lose',
+                profit: profit,
+                completedAt: new Date(),
+                updatedAt: new Date()
+              }
             }
           }
-        );
-      } else {
-        await db.collection('users').updateOne(
-          { _id: trade.userId },
-          {
-            $inc: {
-              'balance.frozen': -trade.amount
+        });
+
+        // Tích lũy cập nhật balance cho user
+        const userId = trade.userId.toString();
+        if (!userUpdates.has(userId)) {
+          userUpdates.set(userId, { available: 0, frozen: 0 });
+        }
+        
+        const userUpdate = userUpdates.get(userId)!;
+        if (isWin) {
+          userUpdate.available += trade.amount + profit;
+          userUpdate.frozen -= trade.amount;
+        } else {
+          userUpdate.frozen -= trade.amount;
+        }
+      }
+
+      // ⚡ TỐI ƯU: Thực hiện bulk update trades
+      if (bulkOps.length > 0) {
+        await db.collection('trades').bulkWrite(bulkOps);
+        console.log(`✅ Updated ${bulkOps.length} trades for session ${sessionId}`);
+      }
+
+      // ⚡ TỐI ƯU: Thực hiện bulk update users
+      const userBulkOps: any[] = [];
+      userUpdates.forEach((update, userId) => {
+        userBulkOps.push({
+          updateOne: {
+            filter: { _id: new ObjectId(userId) },
+            update: {
+              $inc: {
+                'balance.available': update.available,
+                'balance.frozen': update.frozen
+              },
+              $set: { updatedAt: new Date() }
             }
           }
-        );
+        });
+      });
+
+      if (userBulkOps.length > 0) {
+        await db.collection('users').bulkWrite(userBulkOps);
+        console.log(`✅ Updated ${userBulkOps.length} users for session ${sessionId}`);
       }
     }
 
-    // Lấy lại danh sách lệnh đã cập nhật
-    const updatedTrades = await db.collection('trades')
-      .find({ sessionId })
-      .sort({ createdAt: -1 })
-      .toArray();
-
-    // Sau khi xử lý kết quả xong, tạo phiên giao dịch mới để duy trì 30 phiên tương lai
-    await createNewFutureSession(db);
-
-    return NextResponse.json({
+    // ⚡ TỐI ƯU: Trả về kết quả ngay lập tức
+    return NextResponse.json({ 
       hasResult: true,
-      result: session.result,
-      trades: updatedTrades.map(trade => ({
-        ...trade,
-        _id: trade._id.toString(),
-        userId: trade.userId.toString()
-      }))
+      result: session.actualResult || session.result,
+      sessionStatus: session.status,
+      updatedTrades: pendingTrades.length,
+      isRandom: session.createdBy === 'system_random'
     });
 
   } catch (error) {
-    console.error('Error checking trade results:', error);
-    return NextResponse.json(
-      { message: 'Internal server error' },
-      { status: 500 }
-    );
+    console.error('❌ Error in check-results:', error);
+    return NextResponse.json({ 
+      message: 'Internal server error',
+      error: error instanceof Error ? error.message : 'Unknown error',
+      shouldRetry: true
+    }, { status: 500 });
   }
-}
-
-// Hàm tạo phiên giao dịch mới để duy trì 30 phiên tương lai
-async function createNewFutureSession(db: any) {
-  try {
-    const now = new Date();
-    
-    // Kiểm tra số lượng phiên tương lai hiện tại
-    const futureSessionsCount = await db.collection('trading_sessions').countDocuments({
-      startTime: { $gt: now }
-    });
-
-    console.log(`🔍 Hiện tại có ${futureSessionsCount} phiên tương lai`);
-
-    // Nếu có ít hơn 30 phiên, tạo thêm phiên mới
-    if (futureSessionsCount < 30) {
-      const sessionsToCreate = 30 - futureSessionsCount;
-      console.log(`🆕 Tạo thêm ${sessionsToCreate} phiên để duy trì 30 phiên tương lai`);
-
-      for (let i = 0; i < sessionsToCreate; i++) {
-        const sessionStartTime = new Date(now.getTime() + (i + 1) * 60000); // Mỗi phiên cách nhau 1 phút
-        const sessionEndTime = new Date(sessionStartTime.getTime() + 60000); // Phiên kéo dài 1 phút
-        const sessionId = generateSessionId(sessionStartTime);
-
-        // Kiểm tra sessionId đã tồn tại chưa
-        const exists = await db.collection('trading_sessions').findOne({ sessionId });
-        if (!exists) {
-          // Tự động tạo kết quả cho phiên tương lai (50% UP, 50% DOWN)
-          const random = Math.random();
-          const autoResult = random < 0.5 ? 'UP' : 'DOWN';
-          
-          const newSession = {
-            sessionId,
-            startTime: sessionStartTime,
-            endTime: sessionEndTime,
-            status: 'ACTIVE',
-            result: autoResult, // Tự động tạo kết quả
-            createdBy: 'system',
-            createdAt: now,
-            updatedAt: now
-          };
-
-          await db.collection('trading_sessions').insertOne(newSession);
-          console.log(`🆕 Tạo phiên tương lai ${sessionId} với kết quả ${autoResult}`);
-        }
-      }
-    }
-  } catch (error) {
-    console.error('❌ Lỗi khi tạo phiên tương lai:', error);
-  }
-}
-
-// Hàm tạo sessionId
-function generateSessionId(date: Date): string {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const hours = String(date.getUTCHours()).padStart(2, '0');
-  const minutes = String(date.getUTCMinutes()).padStart(2, '0');
-  
-  return `${year}${month}${day}${hours}${minutes}`;
 }

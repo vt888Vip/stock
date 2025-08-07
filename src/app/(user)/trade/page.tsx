@@ -38,7 +38,7 @@ interface TradeResult {
 
 const QUICK_AMOUNTS = [100000, 1000000, 5000000, 10000000, 30000000, 50000000, 100000000, 200000000];
 const SESSION_DURATION = 60; // 60 seconds per session
-const RESULT_DELAY = 5; // 5 seconds delay for result
+const RESULT_DELAY = 12; // 12 seconds delay for result (giữ nguyên để tạo kịch tính)
 
 const formatCurrency = (value: number): string => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(value);
@@ -277,7 +277,7 @@ export default function TradePage() {
       setIsBalanceLocked(true);
       
       // Bắt đầu countdown 12 giây
-      setUpdateCountdown(12);
+      setUpdateCountdown(12); // Giữ nguyên 12 giây để tạo kịch tính
       
       // Hàm cập nhật sau 12 giây
       const updateAfterDelay = async () => {
@@ -318,8 +318,88 @@ export default function TradePage() {
         }
       };
 
-      // Chờ 12 giây rồi cập nhật
+      // Chờ 12 giây rồi cập nhật (giữ nguyên để tạo kịch tính)
       setTimeout(updateAfterDelay, 12000);
+
+      // Thêm polling để kiểm tra kết quả ngay lập tức (nhưng không hiển thị ngay)
+      const pollForResults = async () => {
+        try {
+          const checkResultsResponse = await fetch('/api/trades/check-results', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+            },
+            body: JSON.stringify({ sessionId: currentSessionId })
+          });
+
+          if (checkResultsResponse.ok) {
+            const resultData = await checkResultsResponse.json();
+            if (resultData.hasResult) {
+              // Có kết quả rồi, nhưng không cập nhật UI ngay (để giữ kịch tính)
+              console.log('🎯 Có kết quả ngay lập tức, nhưng chờ 12s để tạo kịch tính');
+              
+              // Hiển thị thông báo nếu kết quả được tạo random
+              if (resultData.isRandom) {
+                console.log('🎲 Kết quả được tạo random do không có kết quả từ admin');
+                // Có thể hiển thị toast nhỏ để thông báo
+                toast({
+                  title: '🎲 Kết quả tự động',
+                  description: 'Kết quả được tạo tự động để đảm bảo hệ thống hoạt động',
+                  duration: 3000,
+                });
+              }
+              
+              return true; // Trả về true để dừng polling
+            }
+          }
+        } catch (error) {
+          console.error('Lỗi khi polling kết quả:', error);
+        }
+        return false; // Trả về false để tiếp tục polling
+      };
+
+      // Poll mỗi 1 giây trong 12 giây đầu để đảm bảo kết quả được xử lý
+      let pollCount = 0;
+      const pollInterval = setInterval(async () => {
+        pollCount++;
+        const hasResult = await pollForResults();
+        
+        if (hasResult) {
+          // Có kết quả rồi, dừng polling
+          clearInterval(pollInterval);
+          console.log('✅ Dừng polling vì đã có kết quả');
+        } else if (pollCount >= 12) {
+          // Hết 12 giây mà chưa có kết quả, tiếp tục polling với tần suất thấp hơn
+          clearInterval(pollInterval);
+          console.log('⚠️ Chưa có kết quả sau 12s, tiếp tục polling với tần suất thấp hơn');
+          
+          // Tiếp tục polling mỗi 3 giây trong 30 giây tiếp theo
+          let extendedPollCount = 0;
+          const extendedPollInterval = setInterval(async () => {
+            extendedPollCount++;
+            const hasResult = await pollForResults();
+            
+            if (hasResult) {
+              clearInterval(extendedPollInterval);
+              console.log('✅ Dừng extended polling vì đã có kết quả');
+            } else if (extendedPollCount >= 10) { // 30 giây (10 * 3s)
+              clearInterval(extendedPollInterval);
+              console.log('🎲 Không có kết quả sau 42s, hệ thống sẽ tạo kết quả random');
+              
+              // Hiển thị thông báo cho người dùng
+              toast({
+                title: '🎲 Kết quả tự động',
+                description: 'Hệ thống sẽ tạo kết quả tự động để đảm bảo hoạt động',
+                duration: 5000,
+              });
+              
+              // Force update để tránh treo
+              await updateAfterDelay();
+            }
+          }, 3000);
+        }
+      }, 1000);
 
       // Trigger session update by calling the API again
       const forceUpdateSession = async () => {
