@@ -150,9 +150,12 @@ export async function POST(request: NextRequest) {
           let newBalance = currentBalance;
           
           if (isWin) {
+            // Thắng: cộng tiền thắng (tiền cược + lợi nhuận)
+            // Vì tiền cược đã bị trừ khi đặt lệnh, nên cần cộng lại + lợi nhuận
             newBalance += trade.amount + profit;
           } else {
-            newBalance -= trade.amount;
+            // Thua: trừ tiền cược (vì tiền đã bị trừ khi đặt lệnh, không cần làm gì thêm)
+            newBalance = currentBalance;
           }
 
           await db.collection('users').updateOne(

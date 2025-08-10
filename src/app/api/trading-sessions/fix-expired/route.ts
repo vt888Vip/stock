@@ -138,12 +138,13 @@ export async function GET(request: NextRequest) {
             
             if (isWin) {
               // Thắng: cộng tiền thắng (tiền cược + lợi nhuận)
+              // Vì tiền cược đã bị trừ khi đặt lệnh, nên cần cộng lại + lợi nhuận
               newBalance += trade.amount + profit;
               totalWins++;
               totalWinAmount += trade.amount + profit;
             } else {
-              // Thua: trừ tiền cược (vì không trừ khi đặt lệnh)
-              newBalance -= trade.amount;
+              // Thua: trừ tiền cược (vì tiền đã bị trừ khi đặt lệnh, không cần làm gì thêm)
+              newBalance = currentBalance;
               totalLosses++;
               totalLossAmount += trade.amount;
             }

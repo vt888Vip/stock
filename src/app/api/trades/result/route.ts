@@ -82,10 +82,11 @@ export async function POST(request: NextRequest) {
     // Cập nhật số dư dựa trên kết quả
     let newAvailableBalance = currentAvailable;
     if (result === 'win') {
-      // Thắng: cộng thêm lợi nhuận (10 ăn 9)
+      // Thắng: cộng tiền thắng (tiền cược + lợi nhuận)
+      // Vì tiền cược đã bị trừ khi đặt lệnh, nên cần cộng lại + lợi nhuận
       newAvailableBalance = currentAvailable + trade.amount + profit;
     } else if (result === 'lose') {
-      // Thua: tiền đã bị trừ khi đặt lệnh, không cần làm gì thêm
+      // Thua: trừ tiền cược (vì tiền đã bị trừ khi đặt lệnh, không cần làm gì thêm)
       newAvailableBalance = currentAvailable;
     }
 

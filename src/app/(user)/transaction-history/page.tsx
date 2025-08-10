@@ -129,22 +129,22 @@ export default function TransactionHistoryPage() {
      switch (status) {
        case 'DA DUYET':
        case 'Đã duyệt':
-         return <Badge className="bg-green-500">Đã duyệt</Badge>;
+         return <Badge className="bg-green-200 text-green-800">Đã duyệt</Badge>;
        case 'CHO XU LY':
        case 'Chờ duyệt':
        case 'Chờ xử lý':
-         return <Badge className="bg-yellow-500">Chờ duyệt</Badge>;
+         return <Badge className="bg-yellow-200 text-yellow-800">Chờ duyệt</Badge>;
        case 'TU CHOI':
        case 'Từ chối':
-         return <Badge className="bg-red-500">Từ chối</Badge>;
+         return <Badge className="bg-red-200 text-red-800">Từ chối</Badge>;
        case 'completed':
        case 'Hoàn thành':
-         return <Badge className="bg-blue-500">Hoàn thành</Badge>;
+         return <Badge className="bg-blue-200 text-blue-800">Hoàn thành</Badge>;
        case 'pending':
        case 'Đang xử lý':
-         return <Badge className="bg-yellow-500">Đang xử lý</Badge>;
+         return <Badge className="bg-yellow-200 text-yellow-800">Đang xử lý</Badge>;
        default:
-         return <Badge className="bg-gray-500">{status}</Badge>;
+         return <Badge className="bg-gray-200 text-gray-800">{status}</Badge>;
      }
    };
 
@@ -182,14 +182,14 @@ export default function TransactionHistoryPage() {
                  <span className="font-semibold text-slate-800 text-sm sm:text-base">
                    {transaction.amount?.toLocaleString()} VND
                  </span>
-                 <div className="flex-shrink-0">
-                   {getStatusBadge(transaction.status)}
-                 </div>
                </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 flex-shrink-0">
                   {formatDate(transaction.createdAt)}
                 </span>
+                <div className="flex-shrink-0">
+                  {getStatusBadge(transaction.status)}
+                </div>
                                  <Button
                    variant="ghost"
                    size="sm"
@@ -206,24 +206,45 @@ export default function TransactionHistoryPage() {
                </div>
              </div>
              
-             {/* Thông tin ngân hàng - chỉ hiển thị khi click dấu + */}
-             {expandedWithdrawals.has(transaction._id) && transaction.bankInfo && (
-               <div className="space-y-1 text-xs sm:text-sm border-t border-slate-200 pt-2 mt-2">
+             {/* Thông tin chi tiết - chỉ hiển thị khi click dấu + */}
+             {expandedWithdrawals.has(transaction._id) && (
+               <div className="space-y-2 text-xs sm:text-sm border-t border-slate-200 pt-3 mt-3 bg-slate-50 p-3 rounded-lg">
                  <div className="flex justify-between">
-                   <span className="text-slate-600">Ngân hàng:</span>
-                   <span className="font-medium text-slate-800">{transaction.bankInfo.bankName || 'N/A'}</span>
+                   <span className="text-slate-600">Loại giao dịch:</span>
+                   <span className="font-medium text-slate-800">Ngân hàng</span>
                  </div>
                  <div className="flex justify-between">
-                   <span className="text-slate-600">Số tài khoản:</span>
-                   <span className="font-mono text-slate-800">{transaction.bankInfo.accountNumber || 'N/A'}</span>
+                   <span className="text-slate-600">Số tiền rút:</span>
+                   <span className="font-medium text-red-600">
+                     {transaction.amount?.toLocaleString()} VND
+                   </span>
                  </div>
                  <div className="flex justify-between">
-                   <span className="text-slate-600">Chủ tài khoản:</span>
-                   <span className="font-medium text-slate-800">{transaction.bankInfo.accountName || transaction.bankInfo.accountHolder || 'N/A'}</span>
+                   <span className="text-slate-600">Số tiền nhận:</span>
+                   <span className="font-medium text-green-600">
+                     {Math.round(transaction.amount * 0.96).toLocaleString()} VND
+                   </span>
                  </div>
+                 {transaction.bankInfo && (
+                   <>
+                     <div className="flex justify-between">
+                       <span className="text-slate-600">Ngân hàng:</span>
+                       <span className="font-medium text-slate-800">{transaction.bankInfo.bankName || 'N/A'}</span>
+                     </div>
+                     <div className="flex justify-between">
+                       <span className="text-slate-600">Số tài khoản:</span>
+                       <span className="font-mono text-slate-800">{transaction.bankInfo.accountNumber || 'N/A'}</span>
+                     </div>
+                     <div className="flex justify-between">
+                       <span className="text-slate-600">Người thụ hưởng:</span>
+                       <span className="font-medium text-slate-800">{transaction.bankInfo.accountName || transaction.bankInfo.accountHolder || 'N/A'}</span>
+                     </div>
+                   </>
+                 )}
                  {transaction.adminNote && (
-                   <div className="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
-                     <strong>Ghi chú:</strong> {transaction.adminNote}
+                   <div className="pt-2 border-t border-slate-200">
+                     <span className="text-slate-600">Ghi chú:</span>
+                     <span className="text-slate-800 ml-2">{transaction.adminNote}</span>
                    </div>
                  )}
                </div>
