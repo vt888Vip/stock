@@ -16,8 +16,8 @@ export default function DepositPage() {
   const router = useRouter();
   const { toast } = useToast();
   const [amount, setAmount] = useState('');
-  const [isConfirmed, setIsConfirmed] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [fullName, setFullName] = useState('');
 
   // Lấy token từ localStorage
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
@@ -75,11 +75,11 @@ export default function DepositPage() {
   };
 
   const handleSubmit = async () => {
-    if (!amount || !isConfirmed) {
+    if (!amount || !fullName.trim()) {
       toast({ 
         variant: 'destructive', 
         title: 'Lỗi', 
-        description: 'Vui lòng điền số tiền và xác nhận' 
+        description: 'Vui lòng điền đầy đủ số tiền và họ tên' 
       });
       return;
     }
@@ -99,7 +99,8 @@ export default function DepositPage() {
         body: JSON.stringify({
           amount: Number(amount),
           bank: platformBanks?.banks?.[0]?.bankName || 'Ngân hàng',
-          confirmed: isConfirmed
+          fullName: fullName.trim(),
+          confirmed: true
         }),
       });
       
@@ -108,7 +109,7 @@ export default function DepositPage() {
       if (res.ok) {
         toast({ title: 'Thành công', description: 'Yêu cầu nạp tiền đã được gửi' });
         setAmount('');
-        setIsConfirmed(false);
+        setFullName('');
       } else {
         toast({ variant: 'destructive', title: 'Lỗi', description: result.message || 'Có lỗi xảy ra' });
       }
@@ -149,7 +150,7 @@ export default function DepositPage() {
               ) : bankInfo ? (
                 <div className="space-y-3">
                   <div className="bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-xl border border-emerald-200 shadow-sm">
-                    <h3 className="text-lg font-bold text-emerald-800 mb-3">{bankInfo.bankName}</h3>
+                    <h3 className="text-lg font-bold text-emerald-800 mb-3">Ngân Hàng : {bankInfo.bankName}</h3>
                     <div className="space-y-3">
                       <div className="flex justify-between items-center">
                         <span className="text-slate-600 text-sm font-medium">Chủ tài khoản:</span>
@@ -169,37 +170,21 @@ export default function DepositPage() {
                           </Button>
                         </div>
                       </div>
-                      {bankInfo.branch && (
-                        <div className="flex justify-between items-center">
-                          <span className="text-slate-600 text-sm font-medium">Chi nhánh:</span>
-                          <span className="text-sm text-slate-700">{bankInfo.branch}</span>
-                        </div>
-                      )}
                     </div>
                   </div>
                   
-                  <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
-                    <p className="text-blue-800 text-sm font-semibold mb-3">Nội dung chuyển khoản:</p>
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-sm bg-white px-3 py-2 rounded-lg border border-blue-200 flex-1 text-slate-800 font-medium">
-                        {transferContent}
-                      </span>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => copyToClipboard(transferContent)}
-                        className="h-8 w-8 p-0 border-blue-300 hover:bg-blue-50"
-                      >
-                        {copied ? <CheckCircle className="h-4 w-4 text-green-600" /> : <Copy className="h-4 w-4 text-blue-600" />}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gradient-to-r from-amber-50 to-orange-50 p-4 rounded-xl border border-amber-200 shadow-sm">
-                    <p className="text-amber-800 text-xs font-medium">
-                      <strong>💡 Lưu ý:</strong> Vui lòng ghi rõ nội dung chuyển khoản như trên để chúng tôi có thể xác nhận nhanh chóng.
-                    </p>
-                  </div>
+                                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                     <p className="text-blue-800 text-sm font-semibold mb-3">Nhập Họ và Tên:</p>
+                     <Input
+                       type="text"
+                       value={fullName}
+                       onChange={(e) => setFullName(e.target.value)}
+                       placeholder="Nhập họ và tên của bạn"
+                       className="border-blue-200 focus:border-blue-500 focus:ring-blue-500"
+                       required
+                     />
+                   </div>
+              
                 </div>
               ) : (
                 <p className="text-slate-600 text-center">Hiện tại chưa có thông tin ngân hàng.</p>
@@ -237,24 +222,10 @@ export default function DepositPage() {
 
 
 
-              <div className="flex items-start space-x-3">
-                <input
-                  type="checkbox"
-                  id="confirm-deposit"
-                  checked={isConfirmed}
-                  onChange={(e) => setIsConfirmed(e.target.checked)}
-                  className="mt-1 h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                  required
-                />
-                <label htmlFor="confirm-deposit" className="text-sm text-slate-700 leading-relaxed">
-                  Tôi xác nhận đã chuyển khoản chính xác số tiền và nội dung như trên. Yêu cầu nạp tiền sẽ được xử lý trong vòng 5-15 phút sau khi xác nhận.
-                </label>
-              </div>
-
               <Button
                 className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold py-3 rounded-xl transition-all duration-200 disabled:bg-slate-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl"
                 onClick={handleSubmit}
-                disabled={!amount || !isConfirmed}
+                disabled={!amount || !fullName.trim()}
               >
                 <Upload className="h-5 w-5 mr-2" />
                 Gửi yêu cầu nạp tiền

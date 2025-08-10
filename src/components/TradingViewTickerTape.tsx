@@ -7,28 +7,51 @@ const TradingViewTickerTape = memo(function TradingViewTickerTape() {
   const [symbolCount, setSymbolCount] = useState(10); // Default symbol count
   const [isLoaded, setIsLoaded] = useState(false);
 
-  // List of symbols to display
+  // List of exactly 20 most reliable symbols - guaranteed to have data
   const allSymbols = [
-    { proName: "OANDA:XAUUSD", title: "Vàng/Đô la Mỹ" },
+    // Major Currency Pairs - Most Liquid & Reliable
     { proName: "FX_IDC:EURUSD", title: "EUR/USD" },
-    { proName: "OANDA:XAGUSD", title: "XAG/USD" },
-    { description: "OIL", proName: "TVC:USOIL" },
-    { description: "VN INDEX", proName: "HOSE:VNINDEX" },
+    { proName: "FX_IDC:GBPUSD", title: "GBP/USD" },
+    { proName: "FX_IDC:USDJPY", title: "USD/JPY" },
+    { proName: "FX_IDC:USDCHF", title: "USD/CHF" },
+    { proName: "FX_IDC:AUDUSD", title: "AUD/USD" },
+    { proName: "FX_IDC:USDCAD", title: "USD/CAD" },
+    
+    // Cross Currency Pairs - Reliable
+    { proName: "FX_IDC:EURGBP", title: "EUR/GBP" },
+    { proName: "FX_IDC:EURJPY", title: "EUR/JPY" },
+    
+    // Asian Currencies - Major ones
+    { proName: "FX_IDC:USDCNH", title: "USD/CNH" },
+    { proName: "FX_IDC:USDSGD", title: "USD/SGD" },
+    
+    // Precious Metals - Most Reliable
+    { proName: "OANDA:XAUUSD", title: "Vàng/Đô la Mỹ" },
+    { proName: "OANDA:XAGUSD", title: "Bạc/Đô la Mỹ" },
+    
+    // Energy - Major Commodities
+    { proName: "TVC:USOIL", title: "Dầu WTI" },
+    { proName: "TVC:UKOIL", title: "Dầu Brent" },
+    
+    // Major US Indices - Most Reliable
+    { proName: "NASDAQ:NDX", title: "NASDAQ 100" },
+    { proName: "SP:SPX", title: "S&P 500" },
+    
+    // European Indices - Reliable
+    { proName: "FTSE:UKX", title: "FTSE 100" },
+    
+    // Cryptocurrencies - Major & Reliable
+    { proName: "BINANCE:BTCUSDT", title: "Bitcoin" },
+    { proName: "BINANCE:BNBUSDT", title: "BNB" },
+    
+    // Bonds - Major Government Bonds
+    { proName: "TVC:US10Y", title: "US 10Y Bond" }
   ];
 
   useEffect(() => {
-    // Determine how many symbols to show based on window width
+    // Always show exactly 20 symbols regardless of screen size
     const updateSymbolCount = () => {
-      const width = window.innerWidth;
-      if (width < 480) {
-        setSymbolCount(2); // Small mobile: show minimum
-      } else if (width < 640) {
-        setSymbolCount(3); // Mobile: show fewer symbols
-      } else if (width < 1024) {
-        setSymbolCount(5); // Tablet
-      } else {
-        setSymbolCount(10); // Desktop
-      }
+      setSymbolCount(20); // Fixed: Always show 20 symbols
     };
 
     // Initial count
@@ -82,6 +105,8 @@ const TradingViewTickerTape = memo(function TradingViewTickerTape() {
         isTransparent: false,
         displayMode: "adaptive",
         locale: "vi_VN",
+        width: "100%",
+        height: 46
       });
       
       // Show loading state is complete when script loads

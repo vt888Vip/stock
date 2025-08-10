@@ -692,7 +692,7 @@ export default function TradePage() {
         toast({
           title: '✅ Đặt lệnh thành công!',
           description: `Lệnh ${selectedAction === 'UP' ? 'LÊN' : 'XUỐNG'} - ${formatCurrency(Number(amount))} - Đang đợi kết quả`,
-          duration: 1000, // Tự động đóng sau 1 giây
+          duration: 2500, // Tự động đóng sau 2.5 giây
         });
 
         // KHÔNG sync balance ngay sau khi đặt lệnh
