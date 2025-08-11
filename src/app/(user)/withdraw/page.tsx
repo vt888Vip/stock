@@ -27,11 +27,7 @@ export default function WithdrawPage() {
     url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
   );
 
-  // Lấy thông tin cài đặt
-  const { data: settings, error: settingsError } = useSWR(
-    token ? '/api/admin/settings' : null,
-    url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
-  );
+
 
 
 
@@ -70,27 +66,6 @@ export default function WithdrawPage() {
     }
 
     const withdrawAmount = Number(amount);
-    
-    // Kiểm tra số tiền tối thiểu và tối đa
-    if (settings && settings.minWithdrawal && settings.maxWithdrawal) {
-      if (withdrawAmount < settings.minWithdrawal) {
-        toast({
-          variant: 'destructive',
-          title: 'Lỗi',
-          description: `Số tiền rút tối thiểu là ${settings.minWithdrawal.toLocaleString()} VND`,
-        });
-        return;
-      }
-      
-      if (withdrawAmount > settings.maxWithdrawal) {
-        toast({
-          variant: 'destructive',
-          title: 'Lỗi',
-          description: `Số tiền rút tối đa là ${settings.maxWithdrawal.toLocaleString()} VND`,
-        });
-        return;
-      }
-    }
 
     // Kiểm tra số dư
     if (withdrawAmount > availableBalance) {
@@ -124,7 +99,7 @@ export default function WithdrawPage() {
       if (res.ok) {
         toast({ 
           title: 'Thành công', 
-          description: `Đã gửi yêu cầu rút tiền thành công. Yêu cầu của bạn đang chờ admin duyệt.` 
+          description: `Đã gửi yêu cầu rút tiền thành công. Bạn vui lòng chờ hệ thống tiếp nhận và tự động thanh khoản cho bạn.` 
         });
         setAmount('');
         
@@ -250,14 +225,7 @@ export default function WithdrawPage() {
                        onChange={(e) => setAmount(e.target.value)}
                        placeholder="Nhập số tiền muốn rút"
                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
-                       min={settings?.minWithdrawal || 100000}
-                       max={Math.min(availableBalance, settings?.maxWithdrawal || 100000000)}
                      />
-                     {settings && settings.minWithdrawal && settings.maxWithdrawal && (
-                       <p className="text-xs text-slate-500 mt-1">
-                         Từ {settings.minWithdrawal.toLocaleString()} - {settings.maxWithdrawal.toLocaleString()} VND
-                       </p>
-                     )}
                    </div>
 
                                      {/* Thông tin chi tiết */}

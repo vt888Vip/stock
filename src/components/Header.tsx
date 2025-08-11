@@ -94,40 +94,37 @@ export default function Header() {
                  </Button>
                </Link>
                
-               {/* Wallet dropdown */}
-               <DropdownMenu open={isWalletDropdownOpen} onOpenChange={setIsWalletDropdownOpen}>
-                 <DropdownMenuTrigger asChild>
-                   <Button 
-                     variant="outline" 
-                     size="sm" 
-                     className="text-blue-600 border-blue-600 bg-white hover:bg-blue-50 font-semibold underline"
-                     style={{ textDecoration: 'underline', fontWeight: 600, color: 'rgb(17, 125, 187)' }}
-                   >
-                     <ChevronDown className="h-4 w-4 mr-1" />
-                     <span>Ví</span>
-                   </Button>
-                 </DropdownMenuTrigger>
-                 <DropdownMenuContent align="start" className="w-56">
-                   <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
-                     <Link href="/deposit" className="flex items-center w-full">
-                       <ArrowDownLeft className="mr-2 h-4 w-4" />
-                       <span>Nạp tiền</span>
-                     </Link>
-                   </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
-                     <Link href="/withdraw" className="flex items-center w-full">
-                       <ArrowUpRight className="mr-2 h-4 w-4" />
-                       <span>Rút tiền</span>
-                     </Link>
-                   </DropdownMenuItem>
-                   <DropdownMenuItem onClick={() => setIsWalletDropdownOpen(false)}>
-                     <Link href="/transaction-history" className="flex items-center w-full">
-                       <Clock className="mr-2 h-4 w-4" />
-                       <span>Lịch sử giao dịch</span>
-                     </Link>
-                   </DropdownMenuItem>
-                 </DropdownMenuContent>
-               </DropdownMenu>
+               {/* Thêm các chức năng ví trực tiếp vào navigation */}
+               <Link href="/deposit">
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="text-blue-600 border-blue-600 bg-white hover:bg-green-50"
+                 >
+                   <ArrowDownLeft className="h-4 w-4 mr-1" />
+                   Nạp tiền
+                 </Button>
+               </Link>
+               <Link href="/withdraw">
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="text-blue-600 border-blue-600 bg-white hover:bg-green-50"
+                 >
+                   <ArrowUpRight className="h-4 w-4 mr-1" />
+                   Rút tiền
+                 </Button>
+               </Link>
+               <Link href="/transaction-history">
+                 <Button
+                   variant="outline"
+                   size="sm"
+                   className="text-blue-600 border-blue-600 bg-white hover:bg-green-50"
+                 >
+                   <Clock className="h-4 w-4 mr-1" />
+                   Lịch sử giao dịch
+                 </Button>
+               </Link>
              </div>
            )}
          </div>

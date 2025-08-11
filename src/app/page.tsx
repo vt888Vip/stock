@@ -145,11 +145,22 @@ function ChartTabs() {
 export default function Landing() {
   const router = useRouter();
   const [isVisible, setIsVisible] = useState(false);
+  const [currentSlide, setCurrentSlide] = useState(0);
+  const totalSlides = 4; // Tăng số slide lên 4
 
   useEffect(() => {
     setIsVisible(true);
     return () => setIsVisible(false);
   }, []);
+
+  // Auto-play slideshow
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentSlide((prev) => (prev === totalSlides - 1 ? 0 : prev + 1));
+    }, 5000); // Change slide every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [totalSlides]);
 
   return (
     <div style={{
@@ -170,13 +181,106 @@ export default function Landing() {
         initial="hidden"
         animate={isVisible ? "show" : "hidden"}
       >
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 lg:gap-6" style={{ marginBottom: '16px' }}>
-          <div className="mb-6 bg-cover bg-center bg-no-repeat rounded-lg w-full" style={{
-            backgroundImage: "url(/slide1.jpg)",
-            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
-            minHeight: '280px',
-            height: 'clamp(280px, 40vh, 400px)'
-          }}></div>
+        {/* Image Slider */}
+        <div className="mb-8">
+          <div className="relative w-full h-96 md:h-[500px] rounded-lg overflow-hidden shadow-lg">
+                         {/* Slide images */}
+             <div className="relative w-full h-full">
+               <div 
+                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                   currentSlide === 0 ? 'opacity-100' : 'opacity-0'
+                 }`}
+                 style={{
+                   backgroundImage: "url(/slide1.jpg)",
+                   backgroundSize: 'cover',
+                   backgroundPosition: 'center',
+                   backgroundRepeat: 'no-repeat'
+                 }}
+               />
+               <div 
+                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                   currentSlide === 1 ? 'opacity-100' : 'opacity-0'
+                 }`}
+                 style={{
+                   backgroundImage: "url(/slider/photo_2025-08-12_01-18-12.jpg)",
+                   backgroundSize: 'cover',
+                   backgroundPosition: 'center',
+                   backgroundRepeat: 'no-repeat'
+                 }}
+               />
+               <div 
+                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                   currentSlide === 2 ? 'opacity-100' : 'opacity-0'
+                 }`}
+                 style={{
+                   backgroundImage: "url(/slider/photo_2025-08-12_01-18-40.jpg)",
+                   backgroundSize: 'cover',
+                   backgroundPosition: 'center',
+                   backgroundRepeat: 'no-repeat'
+                 }}
+               />
+               <div 
+                 className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
+                   currentSlide === 3 ? 'opacity-100' : 'opacity-0'
+                 }`}
+                 style={{
+                   backgroundImage: "url(/slider/photo_2025-08-12_01-18-43.jpg)",
+                   backgroundSize: 'cover',
+                   backgroundPosition: 'center',
+                   backgroundRepeat: 'no-repeat'
+                 }}
+               />
+             </div>
+            
+                         {/* Navigation arrows */}
+             <button
+               onClick={() => setCurrentSlide((prev) => (prev === 0 ? totalSlides - 1 : prev - 1))}
+               className="absolute left-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 p-2 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+               style={{ zIndex: 10 }}
+             >
+               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <path d="M15 18l-6-6 6-6"/>
+               </svg>
+             </button>
+             
+             <button
+               onClick={() => setCurrentSlide((prev) => (prev === totalSlides - 1 ? 0 : prev + 1))}
+               className="absolute right-4 top-1/2 transform -translate-y-1/2 bg-white/80 hover:bg-white text-gray-800 p-2 rounded-full shadow-lg transition-all duration-200 hover:scale-110"
+               style={{ zIndex: 10 }}
+             >
+               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                 <path d="M9 18l6-6-6-6"/>
+               </svg>
+             </button>
+            
+                         {/* Slide indicators */}
+             <div className="absolute bottom-4 left-1/2 transform -translate-x-1/2 flex space-x-2" style={{ zIndex: 10 }}>
+               {[0, 1, 2, 3].map((index) => (
+                 <button
+                   key={index}
+                   onClick={() => setCurrentSlide(index)}
+                   className={`w-3 h-3 rounded-full transition-all duration-200 ${
+                     currentSlide === index 
+                       ? 'bg-white scale-125' 
+                       : 'bg-white/50 hover:bg-white/75'
+                   }`}
+                 />
+               ))}
+             </div>
+            
+            {/* Overlay text */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
+            <div className="absolute bottom-8 left-8 right-8 text-white">
+              <h2 className="text-2xl md:text-3xl font-bold mb-2">LONDON HSC</h2>
+              <p className="text-sm md:text-base opacity-90 max-w-2xl">
+                Sàn giao dịch chứng khoán London (HSC) - Nơi kết nối thị trường tài chính toàn cầu
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Content grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <div style={{ padding: '16px' }}>
             <h2 style={{
               fontSize: 'clamp(16px, 4vw, 20px)',
