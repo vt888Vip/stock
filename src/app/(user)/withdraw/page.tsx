@@ -80,6 +80,51 @@ export default function WithdrawPage() {
     setIsSubmitting(true);
 
     try {
+      // 🔄 Lấy thông tin ngân hàng mới nhất trực tiếp từ database
+      const userResponse = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (!userResponse.ok) {
+        throw new Error('Không thể lấy thông tin user');
+      }
+    
+      const currentUser = await userResponse.json();
+      // Lấy thông tin bank từ đúng cấu trúc
+      const bankInfo = currentUser?.user?.bank || {};
+    
+      // Kiểm tra thông tin ngân hàng chi tiết hơn
+      if (!bankInfo.name) {
+        console.error('❌ [DEBUG] Thiếu tên ngân hàng:', bankInfo.name);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Lỗi', 
+          description: 'Thiếu tên ngân hàng. Vui lòng kiểm tra lại.' 
+        });
+        return;
+      }
+      
+      if (!bankInfo.accountNumber) {
+        console.error('❌ [DEBUG] Thiếu số tài khoản:', bankInfo.accountNumber);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Lỗi', 
+          description: 'Thiếu số tài khoản. Vui lòng kiểm tra lại.' 
+        });
+        return;
+      }
+      
+      if (!bankInfo.accountHolder) {
+        console.error('❌ [DEBUG] Thiếu chủ tài khoản:', bankInfo.accountHolder);
+        toast({ 
+          variant: 'destructive', 
+          title: 'Lỗi', 
+          description: 'Thiếu chủ tài khoản. Vui lòng kiểm tra lại.' 
+        });
+        return;
+      }
+
+      // Gửi yêu cầu rút tiền với thông tin ngân hàng mới nhất từ database
       const res = await fetch('/api/withdrawals', {
         method: 'POST',
         headers: {
@@ -88,9 +133,9 @@ export default function WithdrawPage() {
         },
         body: JSON.stringify({ 
           amount: withdrawAmount,
-          bankName: user?.bank?.name || '',
-          accountNumber: user?.bank?.accountNumber || '',
-          accountHolder: user?.bank?.accountHolder || ''
+          bankName: bankInfo.name,
+          accountNumber: bankInfo.accountNumber,
+          accountHolder: bankInfo.accountHolder
         }),
       });
       
@@ -103,17 +148,18 @@ export default function WithdrawPage() {
         });
         setAmount('');
         
-                 // Refresh balance data
-         refreshBalance();
+        // Refresh balance data
+        refreshBalance();
       } else {
         toast({ variant: 'destructive', title: 'Lỗi', description: result.message || 'Không thể gửi yêu cầu rút tiền' });
       }
     } catch (err) {
+      console.error('❌ [WITHDRAW] Lỗi khi gửi yêu cầu rút tiền:', err);
       toast({ variant: 'destructive', title: 'Lỗi', description: 'Không thể gửi yêu cầu rút tiền' });
     } finally {
       setIsSubmitting(false);
     }
-     };
+  };
 
 
 
@@ -199,7 +245,6 @@ export default function WithdrawPage() {
                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
                      />
                    </div>
-
                                      {/* Thông tin chi tiết */}
                    {amount && Number(amount) > 0 && (
                      <div className="bg-gradient-to-r from-slate-50 to-gray-50 p-3 sm:p-4 rounded-xl border border-slate-200">
