@@ -39,9 +39,32 @@ export async function GET(request: NextRequest) {
     if (!user) {
       return NextResponse.json({ success: false, message: 'Không tìm thấy người dùng' }, { status: 404 });
     }
-    const userBalance = user.balance || { available: 0, frozen: 0 };
-    const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-    const frozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
+    // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+    let userBalance = user.balance || { available: 0, frozen: 0 };
+    
+    // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+    if (typeof userBalance === 'number') {
+      userBalance = {
+        available: userBalance,
+        frozen: 0
+      };
+      
+      // Cập nhật database để chuyển đổi sang kiểu mới
+      await db.collection('users').updateOne(
+        { _id: userId },
+        { 
+          $set: { 
+            balance: userBalance,
+            updatedAt: new Date()
+          } 
+        }
+      );
+      
+      console.log(`🔄 [SYNC BALANCE MIGRATION] User ${user.username}: Chuyển đổi balance từ number sang object`);
+    }
+    
+    const availableBalance = userBalance.available || 0;
+    const frozenBalance = userBalance.frozen || 0;
     return NextResponse.json({
       status: 'ok',
       balance: {

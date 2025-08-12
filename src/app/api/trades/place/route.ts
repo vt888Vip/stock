@@ -53,9 +53,31 @@ export async function POST(req: Request) {
         throw new Error('User not found');
       }
 
-      // 2. Kiểm tra số dư khả dụng
-      const userBalance = userData.balance || { available: 0, frozen: 0 };
-      const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
+      // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+      let userBalance = userData.balance || { available: 0, frozen: 0 };
+      
+      // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+      if (typeof userBalance === 'number') {
+        userBalance = {
+          available: userBalance,
+          frozen: 0
+        };
+        
+        // Cập nhật database để chuyển đổi sang kiểu mới
+        await db.collection('users').updateOne(
+          { _id: new ObjectId(user.userId) },
+          { 
+            $set: { 
+              balance: userBalance,
+              updatedAt: new Date()
+            } 
+          }
+        );
+        
+        console.log(`🔄 [PLACE TRADE MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
+      }
+      
+      const availableBalance = userBalance.available || 0;
       
       if (availableBalance < amount) {
         throw new Error('Insufficient balance');
@@ -80,7 +102,7 @@ export async function POST(req: Request) {
 
       // 4. Trừ tiền khỏi available balance và cộng vào frozen balance
       const newAvailableBalance = availableBalance - amount;
-      const currentFrozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
+      const currentFrozenBalance = userBalance.frozen || 0;
       const newFrozenBalance = currentFrozenBalance + amount;
 
       console.log(`💰 [PLACE TRADE] User ${userData.username}: available ${availableBalance} → ${newAvailableBalance} (-${amount}), frozen ${currentFrozenBalance} → ${newFrozenBalance} (+${amount})`);

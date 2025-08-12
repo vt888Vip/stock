@@ -30,14 +30,35 @@ export async function GET(req: NextRequest) {
       .sort({ createdAt: -1 })
       .toArray();
 
-    // Thêm thông tin số dư user cho mỗi withdrawal
+    // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
     const withdrawalsWithBalance = await Promise.all(
       withdrawals.map(async (withdrawal) => {
         const user = await db.collection('users').findOne({ _id: withdrawal.user });
         if (user) {
-          const userBalance = user.balance || { available: 0, frozen: 0 };
-          const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-          return { ...withdrawal, userBalance: availableBalance };
+          let userBalance = user.balance || { available: 0, frozen: 0 };
+          
+          // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+          if (typeof userBalance === 'number') {
+            userBalance = {
+              available: userBalance,
+              frozen: 0
+            };
+            
+            // Cập nhật database để chuyển đổi sang kiểu mới
+            await db.collection('users').updateOne(
+              { _id: withdrawal.user },
+              { 
+                $set: { 
+                  balance: userBalance,
+                  updatedAt: new Date()
+                } 
+              }
+            );
+            
+            console.log(`🔄 [WITHDRAWAL ADMIN MIGRATION] User ${user.username}: Chuyển đổi balance từ number sang object`);
+          }
+          
+          return { ...withdrawal, userBalance: userBalance.available || 0 };
         }
         return withdrawal;
       })
@@ -123,8 +144,26 @@ export async function POST(req: NextRequest) {
     if (action === 'reject') {
       const user = await db.collection('users').findOne({ _id: withdrawal.user });
       if (user) {
-        const userBalance = user.balance || 0;
-        const newBalance = userBalance + withdrawal.amount;
+        // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+        let userBalance = user.balance || { available: 0, frozen: 0 };
+        
+        // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+        if (typeof userBalance === 'number') {
+          userBalance = {
+            available: userBalance,
+            frozen: 0
+          };
+          
+          console.log(`🔄 [WITHDRAWAL REJECT MIGRATION] User ${user.username}: Chuyển đổi balance từ number sang object`);
+        }
+        
+        const currentAvailable = userBalance.available || 0;
+        const newAvailableBalance = currentAvailable + withdrawal.amount;
+        
+        const newBalance = {
+          ...userBalance,
+          available: newAvailableBalance
+        };
         
         await db.collection('users').updateOne(
           { _id: withdrawal.user },
@@ -136,7 +175,7 @@ export async function POST(req: NextRequest) {
           }
         );
         
-        console.log(`💰 [ADMIN WITHDRAWALS] Đã từ chối và trả lại ${withdrawal.amount} VND cho user ${user.username}. Số dư cũ: ${userBalance} VND, Số dư mới: ${newBalance} VND`);
+        console.log(`💰 [ADMIN WITHDRAWALS] Đã từ chối và trả lại ${withdrawal.amount} VND cho user ${user.username}. Số dư cũ: ${currentAvailable} VND, Số dư mới: ${newAvailableBalance} VND`);
       }
     }
 

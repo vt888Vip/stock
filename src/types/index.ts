@@ -5,12 +5,18 @@ export interface User {
   fullName: string
   phone: string
   email?: string
-  balance: number
+  balance: Balance
   role: "user" | "admin"
   bankInfo?: BankInfo
   isActive: boolean
   createdAt: string
   updatedAt: string
+}
+
+// ✅ CHUẨN HÓA: Balance luôn là object
+export interface Balance {
+  available: number  // Số dư khả dụng
+  frozen: number     // Số dư đã đóng băng
 }
 
 // Bank information

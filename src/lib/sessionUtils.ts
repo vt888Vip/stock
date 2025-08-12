@@ -115,30 +115,80 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
 
         // 6. Cập nhật số dư user
         if (isWin) {
-          // ✅ SỬA LỖI: Khi thắng, cần:
+          // ✅ SỬA LỖI: Sử dụng $set thay vì $inc để tránh race condition
           // 1. Trả lại tiền gốc từ frozen về available
           // 2. Cộng thêm profit vào available
-          await db.collection('users').updateOne(
-            { _id: new ObjectId(trade.userId) },
-            { 
-              $inc: { 
-                'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
-                'balance.frozen': -trade.amount 
-              },
-              $set: { updatedAt: now }
+          
+          // Lấy balance hiện tại của user
+          const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
+          if (currentUser) {
+            // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+            let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
+            
+            // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+            if (typeof currentBalance === 'number') {
+              currentBalance = {
+                available: currentBalance,
+                frozen: 0
+              };
+              
+              console.log(`🔄 [${apiName} MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
             }
-          );
-          console.log(`💰 [${apiName}] User ${trade.userId} thắng: +${trade.amount + profit} VND (tiền gốc + profit)`);
+
+            // Tính toán balance mới
+            const newAvailableBalance = currentBalance.available + trade.amount + profit;
+            const newFrozenBalance = currentBalance.frozen - trade.amount;
+
+            await db.collection('users').updateOne(
+              { _id: new ObjectId(trade.userId) },
+              { 
+                $set: { 
+                  balance: {
+                    available: newAvailableBalance,
+                    frozen: newFrozenBalance
+                  },
+                  updatedAt: now
+                }
+              }
+            );
+            
+            console.log(`💰 [${apiName}] User ${currentUser.username} thắng: available ${currentBalance.available} → ${newAvailableBalance} (+${trade.amount + profit}), frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
+          }
         } else {
           // Thua: chỉ trừ tiền cược (đã bị đóng băng)
-          await db.collection('users').updateOne(
-            { _id: new ObjectId(trade.userId) },
-            { 
-              $inc: { 'balance.frozen': -trade.amount },
-              $set: { updatedAt: now }
+          const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
+          if (currentUser) {
+            // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+            let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
+            
+            // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+            if (typeof currentBalance === 'number') {
+              currentBalance = {
+                available: currentBalance,
+                frozen: 0
+              };
+              
+              console.log(`🔄 [${apiName} MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
             }
-          );
-          console.log(`💸 [${apiName}] User ${trade.userId} thua: -${trade.amount} VND`);
+
+            // Tính toán balance mới
+            const newFrozenBalance = currentBalance.frozen - trade.amount;
+
+            await db.collection('users').updateOne(
+              { _id: new ObjectId(trade.userId) },
+              { 
+                $set: { 
+                  balance: {
+                    ...currentBalance,
+                    frozen: newFrozenBalance
+                  },
+                  updatedAt: now
+                }
+              }
+            );
+            
+            console.log(`💸 [${apiName}] User ${currentUser.username} thua: frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
+          }
         }
       }
 

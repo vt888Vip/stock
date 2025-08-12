@@ -52,13 +52,33 @@ export async function POST(req: NextRequest) {
     // ✅ Đã loại bỏ giới hạn rút tiền - User có thể rút bất kỳ số tiền nào (chỉ cần đủ số dư)
     console.log('✅ Không có giới hạn rút tiền - User có thể rút bất kỳ số tiền nào');
 
+    // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+    let userBalance = user.balance || { available: 0, frozen: 0 };
+    
+    // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+    if (typeof userBalance === 'number') {
+      userBalance = {
+        available: userBalance,
+        frozen: 0
+      };
+      
+      console.log(`🔄 [WITHDRAWAL MIGRATION] User ${user.username}: Chuyển đổi balance từ number sang object`);
+    }
+    
+    const currentAvailable = userBalance.available || 0;
+    
     // Kiểm tra số dư
-    if (user.balance < amount) {
+    if (currentAvailable < amount) {
       return NextResponse.json({ message: 'Số dư không đủ' }, { status: 400 });
     }
 
     // ✅ TRỪ TIỀN NGAY LẬP TỨC khi user rút tiền
-    const newBalance = user.balance - amount;
+    const newAvailableBalance = currentAvailable - amount;
+    const newBalance = {
+      ...userBalance,
+      available: newAvailableBalance
+    };
+    
     await db.collection('users').updateOne(
       { _id: new ObjectId(userId) },
       { 
@@ -69,7 +89,7 @@ export async function POST(req: NextRequest) {
       }
     );
     
-    console.log(`💰 [WITHDRAWAL] Đã trừ ${amount} VND từ user ${user.username}. Số dư cũ: ${user.balance} VND, Số dư mới: ${newBalance} VND`);
+    console.log(`💰 [WITHDRAWAL] Đã trừ ${amount} VND từ user ${user.username}. Số dư cũ: ${currentAvailable} VND, Số dư mới: ${newAvailableBalance} VND`);
 
     // Tạo yêu cầu rút tiền mới với ID theo định dạng RUT-username-timestamp
     const timestamp = new Date().getTime();

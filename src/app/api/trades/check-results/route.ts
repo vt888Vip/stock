@@ -128,7 +128,7 @@ export async function POST(req: Request) {
         const oldFrozen = userUpdate.frozen;
         
         if (isWin) {
-          // ✅ SỬA LỖI: Khi thắng, cần:
+          // ✅ CHUẨN HÓA: Khi thắng, cần:
           // 1. Trả lại tiền gốc từ frozen về available
           // 2. Cộng thêm profit vào available
           userUpdate.available += trade.amount + profit; // Trả tiền gốc + cộng profit
@@ -147,23 +147,71 @@ export async function POST(req: Request) {
         console.log(`✅ Updated ${bulkOps.length} trades for session ${sessionId}`);
       }
 
-      // ⚡ TỐI ƯU: Thực hiện bulk update users
+      // ✅ SỬA LỖI: Sử dụng $set thay vì $inc để tránh race condition
       const userBulkOps: any[] = [];
       userUpdates.forEach((update, userId) => {
         console.log(`🔄 [USER UPDATE] User ${userId}: available +${update.available}, frozen ${update.frozen > 0 ? '+' : ''}${update.frozen}`);
+        
+        // Lấy balance hiện tại của user để tính toán chính xác
         userBulkOps.push({
           updateOne: {
             filter: { _id: new ObjectId(userId) },
             update: {
-              $inc: {
-                'balance.available': update.available,
-                'balance.frozen': update.frozen
-              },
-              $set: { updatedAt: new Date() }
+              $set: { 
+                updatedAt: new Date() 
+              }
             }
           }
         });
       });
+
+      // ✅ SỬA LỖI: Cập nhật balance từng user một để tránh race condition
+      for (const [userId, update] of Array.from(userUpdates.entries())) {
+        try {
+          // Lấy balance hiện tại của user
+          const currentUser = await db.collection('users').findOne({ _id: new ObjectId(userId) });
+          if (!currentUser) {
+            console.error(`❌ [USER UPDATE] Không tìm thấy user ${userId}`);
+            continue;
+          }
+
+          // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+          let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
+          
+          // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+          if (typeof currentBalance === 'number') {
+            currentBalance = {
+              available: currentBalance,
+              frozen: 0
+            };
+            
+            console.log(`🔄 [CHECK RESULTS MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
+          }
+
+          // Tính toán balance mới
+          const newAvailableBalance = currentBalance.available + update.available;
+          const newFrozenBalance = currentBalance.frozen + update.frozen;
+
+          console.log(`💰 [USER UPDATE] User ${currentUser.username}: available ${currentBalance.available} → ${newAvailableBalance} (+${update.available}), frozen ${currentBalance.frozen} → ${newFrozenBalance} (${update.frozen > 0 ? '+' : ''}${update.frozen})`);
+
+          // Cập nhật balance
+          await db.collection('users').updateOne(
+            { _id: new ObjectId(userId) },
+            { 
+              $set: { 
+                balance: {
+                  available: newAvailableBalance,
+                  frozen: newFrozenBalance
+                },
+                updatedAt: new Date()
+              }
+            }
+          );
+
+        } catch (error) {
+          console.error(`❌ [USER UPDATE] Lỗi khi cập nhật user ${userId}:`, error);
+        }
+      }
 
       if (userBulkOps.length > 0) {
         await db.collection('users').bulkWrite(userBulkOps);

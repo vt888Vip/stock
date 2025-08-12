@@ -124,9 +124,20 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ message: 'Không tìm thấy người dùng' }, { status: 404 });
       }
 
-      // Tính balance mới
-      const userBalance = userData.balance || { available: 0, frozen: 0 };
-      const currentAvailable = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
+      // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+      let userBalance = userData.balance || { available: 0, frozen: 0 };
+      
+      // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+      if (typeof userBalance === 'number') {
+        userBalance = {
+          available: userBalance,
+          frozen: 0
+        };
+        
+        console.log(`🔄 [DEPOSIT MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
+      }
+      
+      const currentAvailable = userBalance.available || 0;
       const newAvailableBalance = currentAvailable + deposit.amount;
 
       // Cộng tiền vào tài khoản người dùng
@@ -136,7 +147,7 @@ export async function POST(req: NextRequest) {
           $set: { 
             balance: {
               available: newAvailableBalance,
-              frozen: typeof userBalance === 'number' ? 0 : userBalance.frozen || 0
+              frozen: userBalance.frozen || 0
             },
             updatedAt: new Date()
           }

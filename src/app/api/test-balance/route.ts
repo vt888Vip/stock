@@ -26,10 +26,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ message: 'User not found' }, { status: 404 });
     }
 
-    // Lấy balance hiện tại
-    const currentBalance = userData.balance || { available: 0, frozen: 0 };
-    const availableBalance = typeof currentBalance === 'number' ? currentBalance : currentBalance.available || 0;
-    const frozenBalance = typeof currentBalance === 'number' ? 0 : currentBalance.frozen || 0;
+    // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+    let currentBalance = userData.balance || { available: 0, frozen: 0 };
+    
+    // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+    if (typeof currentBalance === 'number') {
+      currentBalance = {
+        available: currentBalance,
+        frozen: 0
+      };
+      
+      console.log(`🔄 [TEST BALANCE MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
+    }
+    
+    const availableBalance = currentBalance.available || 0;
+    const frozenBalance = currentBalance.frozen || 0;
 
     // Lấy lịch sử trades gần đây
     const recentTrades = await db.collection('trades')
@@ -38,7 +49,7 @@ export async function GET(request: NextRequest) {
       .limit(10)
       .toArray();
 
-    // Tính toán balance theo logic mới
+    // ✅ SỬA LỖI: Tính toán balance theo logic chính xác
     let calculatedAvailable = availableBalance;
     let calculatedFrozen = frozenBalance;
 
@@ -48,7 +59,9 @@ export async function GET(request: NextRequest) {
         // Không cần thay đổi gì
       } else if (trade.status === 'completed') {
         if (trade.result === 'win') {
-          // Trade thắng: tiền gốc đã được trả từ frozen về available, cộng thêm profit
+          // ✅ SỬA LỖI: Trade thắng - tiền gốc đã được trả từ frozen về available, cộng thêm profit
+          // Lưu ý: Logic này giả định rằng balance hiện tại đã được cập nhật đúng
+          // Nếu balance bị sai, cần sửa lại
           calculatedAvailable += (trade.amount || 0) + (trade.profit || 0);
           calculatedFrozen -= trade.amount || 0;
         } else if (trade.result === 'lose') {
@@ -57,6 +70,11 @@ export async function GET(request: NextRequest) {
         }
       }
     }
+
+    // ✅ KIỂM TRA: So sánh balance hiện tại với balance tính toán
+    const availableDiff = Math.abs(calculatedAvailable - availableBalance);
+    const frozenDiff = Math.abs(calculatedFrozen - frozenBalance);
+    const hasDiscrepancy = availableDiff > 1000 || frozenDiff > 1000; // Cho phép sai số 1000 VND
 
     return NextResponse.json({
       success: true,
@@ -70,6 +88,12 @@ export async function GET(request: NextRequest) {
           available: calculatedAvailable,
           frozen: calculatedFrozen,
           total: calculatedAvailable + calculatedFrozen
+        },
+        discrepancy: {
+          hasDiscrepancy,
+          availableDiff,
+          frozenDiff,
+          message: hasDiscrepancy ? 'Phát hiện sự khác biệt lớn giữa balance hiện tại và balance tính toán. Cần kiểm tra và sửa lỗi.' : 'Balance chính xác'
         },
         recentTrades: recentTrades.map(trade => ({
           id: trade._id,

@@ -213,11 +213,24 @@ function useAuthStandalone(): AuthContextType {
             const meData = await meResponse.json();
             
             if (meData?.success && meData.user) {
+              // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+              let userBalance = meData.user.balance || { available: 0, frozen: 0 };
+              
+              // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+              if (typeof userBalance === 'number') {
+                userBalance = {
+                  available: userBalance,
+                  frozen: 0
+                };
+                
+                console.log(`🔄 [USE AUTH MIGRATION] User ${meData.user.username}: Chuyển đổi balance từ number sang object`);
+              }
+              
               // Cập nhật thông tin người dùng
               const userData = {
                 ...meData.user,
                 // Đảm bảo các trường bắt buộc tồn tại
-                balance: meData.user.balance || { available: 0, frozen: 0 }
+                balance: userBalance
               };
               setUser(userData);
               
