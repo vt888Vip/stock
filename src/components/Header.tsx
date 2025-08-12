@@ -270,7 +270,7 @@ export default function Header() {
                      className="border-blue-600 text-blue-600 hover:bg-blue-50 text-xs px-1.5 sm:px-3 h-7 sm:h-9"
                    >
                      <span className="hidden sm:inline">Mở tài khoản</span>
-                     <span className="sm:hidden">Tài khoản</span>
+                     <span className="sm:hidden">Đăng ký</span>
                    </Button>
                  </Link>
                  <Button 

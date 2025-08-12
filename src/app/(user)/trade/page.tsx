@@ -50,9 +50,16 @@ const formatAmount = (value: string): string => {
 };
 
 // Hàm sync balance - chỉ sync khi tất cả trades đã hoàn thành
-async function syncBalance(setBalance: React.Dispatch<React.SetStateAction<number>>, setIsSyncing: React.Dispatch<React.SetStateAction<boolean>>, waitForPending = true) {
+async function syncBalance(
+  setBalance: React.Dispatch<React.SetStateAction<number>>, 
+  setIsSyncing: React.Dispatch<React.SetStateAction<boolean>>, 
+  waitForPending = true,
+  setLastBalanceSync?: React.Dispatch<React.SetStateAction<number>>
+) {
   let tries = 0;
   setIsSyncing(true);
+  
+  console.log('🔄 [BALANCE] Bắt đầu sync balance, waitForPending:', waitForPending);
   
   while (tries < 10) { // Tăng số lần thử lên 10
     try {
@@ -68,10 +75,16 @@ async function syncBalance(setBalance: React.Dispatch<React.SetStateAction<numbe
       const data = await res.json();
       
       if (data.success) {
-        setBalance(data.balance.available);
+        const newBalance = data.balance.available;
+        console.log('✅ [BALANCE] Sync balance thành công:', newBalance);
+        setBalance(newBalance);
+        if (setLastBalanceSync) {
+          setLastBalanceSync(Date.now());
+        }
         break;
       } else if (res.status === 202) {
         // Còn trades pending, chờ thêm
+        console.log('⏳ [BALANCE] Còn trades pending, chờ thêm...');
         await new Promise(r => setTimeout(r, 2000)); // Chờ 2 giây
         tries++;
       } else {
@@ -79,7 +92,7 @@ async function syncBalance(setBalance: React.Dispatch<React.SetStateAction<numbe
         await new Promise(r => setTimeout(r, 1000));
       }
     } catch (error) {
-      console.error('❌ Error syncing balance:', error);
+      console.error('❌ [BALANCE] Error syncing balance:', error);
       tries++;
       await new Promise(r => setTimeout(r, 1000));
     }
@@ -117,6 +130,7 @@ export default function TradePage() {
   const [updateCountdown, setUpdateCountdown] = useState<number | null>(null);
   const [countdownStarted, setCountdownStarted] = useState(false);
   const [isBalanceLocked, setIsBalanceLocked] = useState(false);
+  const [lastBalanceSync, setLastBalanceSync] = useState<number>(0);
 
   // Load user balance and current session
   useEffect(() => {
@@ -181,6 +195,7 @@ export default function TradePage() {
     if (!authLoading && user && updateCountdown === null && !isBalanceLocked) {
       const loadInitialBalance = async () => {
         try {
+          console.log('🔄 [INIT] Bắt đầu load balance ban đầu');
           const balanceResponse = await fetch('/api/user/balance', {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`
@@ -190,11 +205,13 @@ export default function TradePage() {
           if (balanceResponse.ok) {
             const balanceData = await balanceResponse.json();
             if (balanceData.success) {
-              setBalance(balanceData.balance.available);
+              const initialBalance = balanceData.balance.available;
+              console.log('✅ [INIT] Load balance ban đầu thành công:', initialBalance);
+              setBalance(initialBalance);
             }
           }
         } catch (error) {
-          console.error('Lỗi khi load balance ban đầu:', error);
+          console.error('❌ [INIT] Lỗi khi load balance ban đầu:', error);
         }
       };
 
@@ -307,8 +324,9 @@ export default function TradePage() {
             }
           }
 
-          // Sync balance
-          await syncBalance(setBalance, setIsSyncingBalance, true);
+          // Sync balance sau khi phiên kết thúc
+          console.log('🔄 [SESSION] Bắt đầu sync balance sau khi phiên kết thúc');
+          await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync);
         } catch (error) {
           console.error('Lỗi khi cập nhật sau 12 giây:', error);
         } finally {
@@ -520,6 +538,17 @@ export default function TradePage() {
     }
   }, []);
 
+  // Tránh gọi syncBalance quá thường xuyên (tối thiểu 5 giây giữa các lần gọi)
+  useEffect(() => {
+    const now = Date.now();
+    const timeSinceLastSync = now - lastBalanceSync;
+    const minSyncInterval = 5000; // 5 giây
+    
+    if (timeSinceLastSync < minSyncInterval) {
+      console.log('⏳ [BALANCE] Chưa đủ thời gian để sync balance lại:', Math.ceil((minSyncInterval - timeSinceLastSync) / 1000), 'giây');
+    }
+  }, [lastBalanceSync]);
+
   // Cập nhật symbol biểu đồ mặc định
   useEffect(() => {
     setChartSymbol('TVC:GOLD');
@@ -680,10 +709,10 @@ export default function TradePage() {
 
         setTradeHistory(prev => [newTrade, ...prev]);
 
-        // Cập nhật số dư ngay trên UI (giảm available) - chỉ khi không bị lock
-        if (!isBalanceLocked) {
-          setBalance(prev => prev - Number(amount));
-        }
+        // KHÔNG cập nhật balance ngay trên UI để tránh xung đột
+        // Balance sẽ được sync từ backend sau khi đặt lệnh thành công
+        console.log('💰 [TRADE] Đặt lệnh thành công, không cập nhật balance ngay trên UI');
+        
         // Nếu có quản lý frozen, có thể cập nhật thêm ở đây
 
         setAmount('');
@@ -695,8 +724,15 @@ export default function TradePage() {
           duration: 2500, // Tự động đóng sau 2.5 giây
         });
 
-        // KHÔNG sync balance ngay sau khi đặt lệnh
-        // Balance sẽ được sync sau 12 giây khi phiên kết thúc
+        // Sync balance ngay sau khi đặt lệnh để cập nhật UI chính xác
+        console.log('🔄 [TRADE] Bắt đầu sync balance sau khi đặt lệnh');
+        setTimeout(async () => {
+          try {
+            await syncBalance(setBalance, setIsSyncingBalance, false, setLastBalanceSync);
+          } catch (error) {
+            console.error('❌ [TRADE] Lỗi khi sync balance sau đặt lệnh:', error);
+          }
+        }, 1000); // Chờ 1 giây để backend xử lý xong
       }
     } catch (error) {
       console.error('Lỗi khi đặt lệnh:', error);
@@ -736,7 +772,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-gray-900">
-      <div className="p-4 md:p-8">
+      <div className="p-1 md:p-8">
         <Dialog
           open={false} // ĐÃ XOÁ: Không mở Dialog kết quả thắng/thua nữa
           onOpenChange={() => {}}
@@ -790,12 +826,20 @@ export default function TradePage() {
                 </CardHeader>
                                  <CardContent>
                    {/* Hiển thị số dư */}
-                   <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                     <div className="flex items-center justify-between text-blue-900">
-                       <span className="font-semibold">SỐ DƯ:</span>
-                       <span className="text-lg font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
-                     </div>
-                   </div>
+                                       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                      <div className="flex items-center justify-between text-blue-900">
+                        <span className="font-semibold">SỐ DƯ:</span>
+                        <span className="text-lg font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
+                      </div>
+                      {/* Debug info - chỉ hiển thị trong development */}
+                      {process.env.NODE_ENV === 'development' && (
+                        <div className="mt-2 text-xs text-blue-700">
+                          <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
+                          <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
+                          <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                        </div>
+                      )}
+                    </div>
                    
                    <div className="mb-4">
                      <div className="flex justify-between items-center mb-2">
@@ -944,20 +988,20 @@ export default function TradePage() {
             </div>
           </div>
 
-          {/* Mobile Layout - Thứ tự: Biểu đồ → Số dư → Đặt lệnh → Lịch sử giao dịch */}
-          <div className="lg:hidden space-y-4">
+          {/* Mobile Layout - Thứ tự: Biểu đồ → Số dư → Đặt lệnh → Lịch sử giao dịch - Full màn hình với margin nhẹ */}
+          <div className="lg:hidden space-y-2 min-h-screen">
             {/* 1. Biểu đồ */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               {/* Market Data Ticker */}
-              <Card className="bg-white border-gray-300 rounded-md shadow">
+              <Card className="bg-white border border-gray-200 rounded-lg shadow-sm">
                 <CardContent className="p-0">
                   <TradingViewTickerTape />
                 </CardContent>
               </Card>
 
                              {/* Advanced Chart */}
-               <Card className="bg-white border-gray-500 rounded-md shadow h-[350px]">
-                 <CardContent className="p-2 h-full">
+               <Card className="bg-white border border-gray-200 rounded-lg shadow-sm h-[400px]">
+                 <CardContent className="p-0 h-full">
                    <TradingViewAdvancedChart 
                      key={chartSymbol} 
                      symbol={chartSymbol} 
@@ -968,7 +1012,7 @@ export default function TradePage() {
             </div>
 
             {/* 3. Đặt lệnh */}
-            <Card className="bg-white border border-gray-300 rounded-md shadow">
+            <Card className="bg-white border border-gray-200 rounded-lg shadow-sm">
               <CardHeader>
                 <div className="flex items-center space-x-2">
                   <ChevronDown className="h-4 w-4 text-gray-700" />
@@ -980,12 +1024,20 @@ export default function TradePage() {
               </CardHeader>
                              <CardContent>
                  {/* Hiển thị số dư */}
-                 <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
-                   <div className="flex items-center justify-between text-blue-900">
-                     <span className="font-semibold text-sm">SỐ DƯ:</span>
-                     <span className="text-base font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
-                   </div>
-                 </div>
+                                   <div className="mb-3 p-2 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center justify-between text-blue-900">
+                      <span className="font-semibold text-sm">SỐ DƯ:</span>
+                      <span className="text-base font-bold" suppressHydrationWarning>{formatCurrency(balance || 0)} VND</span>
+                    </div>
+                    {/* Debug info - chỉ hiển thị trong development */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <div className="mt-1 text-xs text-blue-700">
+                        <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
+                        <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
+                        <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                      </div>
+                    )}
+                  </div>
                  
                  <div className="mb-3">
                    <div className="flex justify-between items-center mb-2">
@@ -1094,9 +1146,9 @@ export default function TradePage() {
             <TradeHistory tradeHistory={tradeHistory} formatCurrency={formatCurrency} />
 
             {/* 5. Cập nhật */}
-            <Card className="bg-white border-gray-300 rounded-md shadow">
+            <Card className="bg-white border border-gray-200 rounded-lg shadow-sm">
               <CardHeader>
-                <CardTitle className="text-gray-7700">Cập nhật</CardTitle>
+                <CardTitle className="text-gray-900">Cập nhật</CardTitle>
               </CardHeader>
               <CardContent>
                 <LiquidityTable />
