@@ -115,9 +115,6 @@ export default function AccountPage() {
   // Lấy balance từ user object
   const getUserBalance = () => {
     if (!user) return 0;
-    
-    console.log('User balance object:', user.balance); // Debug log
-    
     if (typeof user.balance === 'number') {
       return user.balance;
     }
@@ -132,7 +129,6 @@ export default function AccountPage() {
   useEffect(() => {
     if (user) {
       const userBalance = getUserBalance();
-      console.log('Calculated balance:', userBalance); // Debug log
       setBalance(userBalance);
     }
   }, [user]);
@@ -148,6 +144,8 @@ export default function AccountPage() {
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     router.push(`/account?tab=${value}`);
+    // ✅ THỰC SỰ REFRESH DỮ LIỆU
+    refreshUser();
   };
 
   const handleDeposit = () => {

@@ -14,7 +14,7 @@ import { Wallet, ArrowDownRight, Building2, AlertCircle } from 'lucide-react';
 import useSWR from 'swr';
 
 export default function WithdrawPage() {
-  const { user, isLoading, isAuthenticated } = useAuth();
+  const { user, isLoading, isAuthenticated, refreshUser } = useAuth();
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
   const router = useRouter();
   const { toast } = useToast();
@@ -27,8 +27,30 @@ export default function WithdrawPage() {
     url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
   );
 
+  // ✅ THÊM: Tự động refresh dữ liệu khi trang được truy cập
+  useEffect(() => {
+    if (user && token) {
+      // ✅ THỰC SỰ REFRESH DỮ LIỆU khi truy cập trang
+      refreshUser();
+      refreshBalance();
+    }
+  }, [user, token, refreshUser, refreshBalance]);
 
+  // ✅ THÊM: Refresh dữ liệu khi user quay lại trang (focus)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (user && token) {
+        refreshUser();
+        refreshBalance();
+      }
+    };
 
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [user, token, refreshUser, refreshBalance]);
 
 
   const availableBalance = balanceData?.balance?.available || 0;
@@ -185,16 +207,16 @@ export default function WithdrawPage() {
                 Số dư khả dụng
               </CardTitle>
             </CardHeader>
-                         <CardContent>
-               <div className="text-center">
-                 <div className="text-lg sm:text-2xl font-bold text-green-600 mb-1">
-                   {availableBalance.toLocaleString()} VND
-                 </div>
-                 <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
-                   Phí rút: 4%
-                 </Badge>
-               </div>
-             </CardContent>
+            <CardContent>
+              <div className="text-center">
+                <div className="text-lg sm:text-2xl font-bold text-green-600 mb-1">
+                  {availableBalance.toLocaleString()} VND
+                </div>
+                <Badge variant="secondary" className="bg-blue-100 text-blue-800 text-xs">
+                  Phí rút: 4%
+                </Badge>
+              </div>
+            </CardContent>
           </Card>
 
           {/* Kiểm tra tài khoản ngân hàng */}

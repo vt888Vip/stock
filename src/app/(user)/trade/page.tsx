@@ -58,9 +58,7 @@ async function syncBalance(
 ) {
   let tries = 0;
   setIsSyncing(true);
-  
-  console.log('🔄 [BALANCE] Bắt đầu sync balance, waitForPending:', waitForPending);
-  
+    
   while (tries < 10) { // Tăng số lần thử lên 10
     try {
       const url = waitForPending 
@@ -76,7 +74,6 @@ async function syncBalance(
       
       if (data.success) {
         const newBalance = data.balance.available;
-        console.log('✅ [BALANCE] Sync balance thành công:', newBalance);
         setBalance(newBalance);
         if (setLastBalanceSync) {
           setLastBalanceSync(Date.now());
@@ -84,7 +81,6 @@ async function syncBalance(
         break;
       } else if (res.status === 202) {
         // Còn trades pending, chờ thêm
-        console.log('⏳ [BALANCE] Còn trades pending, chờ thêm...');
         await new Promise(r => setTimeout(r, 2000)); // Chờ 2 giây
         tries++;
       } else {
@@ -195,7 +191,6 @@ export default function TradePage() {
     if (!authLoading && user && updateCountdown === null && !isBalanceLocked) {
       const loadInitialBalance = async () => {
         try {
-          console.log('🔄 [INIT] Bắt đầu load balance ban đầu');
           const balanceResponse = await fetch('/api/user/balance', {
             headers: {
               'Authorization': `Bearer ${localStorage.getItem('authToken')}`
@@ -206,7 +201,6 @@ export default function TradePage() {
             const balanceData = await balanceResponse.json();
             if (balanceData.success) {
               const initialBalance = balanceData.balance.available;
-              console.log('✅ [INIT] Load balance ban đầu thành công:', initialBalance);
               setBalance(initialBalance);
             }
           }
@@ -325,7 +319,6 @@ export default function TradePage() {
           }
 
           // Sync balance sau khi phiên kết thúc
-          console.log('🔄 [SESSION] Bắt đầu sync balance sau khi phiên kết thúc');
           await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync);
         } catch (error) {
           console.error('Lỗi khi cập nhật sau 12 giây:', error);
@@ -355,7 +348,6 @@ export default function TradePage() {
             const resultData = await checkResultsResponse.json();
             if (resultData.hasResult) {
               // Có kết quả rồi, nhưng không cập nhật UI ngay (để giữ kịch tính)
-              console.log('🎯 Có kết quả ngay lập tức, nhưng chờ 12s để tạo kịch tính');
               return true; // Trả về true để dừng polling
             }
           }
@@ -374,11 +366,9 @@ export default function TradePage() {
         if (hasResult) {
           // Có kết quả rồi, dừng polling
           clearInterval(pollInterval);
-          console.log('✅ Dừng polling vì đã có kết quả');
         } else if (pollCount >= 12) {
           // Hết 12 giây mà chưa có kết quả, tiếp tục polling với tần suất thấp hơn
           clearInterval(pollInterval);
-          console.log('⚠️ Chưa có kết quả sau 12s, tiếp tục polling với tần suất thấp hơn');
           
           // Tiếp tục polling mỗi 3 giây trong 30 giây tiếp theo
           let extendedPollCount = 0;
@@ -388,10 +378,8 @@ export default function TradePage() {
             
             if (hasResult) {
               clearInterval(extendedPollInterval);
-              console.log('✅ Dừng extended polling vì đã có kết quả');
             } else if (extendedPollCount >= 10) { // 30 giây (10 * 3s)
               clearInterval(extendedPollInterval);
-              console.log('🎲 Không có kết quả sau 42s, hệ thống sẽ tạo kết quả random');
               
               // Hiển thị thông báo cho người dùng
               toast({

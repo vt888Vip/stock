@@ -45,14 +45,8 @@ export default function TransactionHistoryPage() {
   const fetchTransactions = async (type = 'all', pageNum = 1) => {
     try {
       const token = getToken();
-      console.log('🔍 [FRONTEND] Bắt đầu fetchTransactions');
-      console.log('🔑 [FRONTEND] Token:', token ? token.substring(0, 20) + '...' : 'Không có token');
-      console.log('👤 [FRONTEND] User:', user);
-      console.log('📋 [FRONTEND] Params:', { type, pageNum });
-      
       setLoading(true);
       const url = `/api/user/transaction-history?type=${type}&page=${pageNum}`;
-      console.log('🌐 [FRONTEND] API URL:', url);
       
       const response = await fetch(url, {
         headers: {
@@ -60,12 +54,8 @@ export default function TransactionHistoryPage() {
         }
       });
 
-      console.log('📡 [FRONTEND] Response status:', response.status);
-      console.log('📡 [FRONTEND] Response ok:', response.ok);
-
       if (response.ok) {
         const data = await response.json();
-        console.log('📊 [FRONTEND] Response data:', data);
         setTransactions(data.transactions);
         setTotalPages(data.pagination.totalPages);
       } else {
@@ -81,12 +71,8 @@ export default function TransactionHistoryPage() {
 
   useEffect(() => {
     const token = getToken();
-    console.log('🔄 [FRONTEND] useEffect triggered');
-    console.log('🔑 [FRONTEND] Token in useEffect:', token ? 'Có token' : 'Không có token');
-    console.log('👤 [FRONTEND] User in useEffect:', user);
     
     if (token && user) {
-      console.log('✅ [FRONTEND] Có token và user, gọi fetchTransactions');
       fetchTransactions(activeTab, page);
     } else {
       console.log('❌ [FRONTEND] Không có token hoặc user, không gọi API');
