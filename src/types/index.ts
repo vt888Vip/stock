@@ -92,7 +92,7 @@ export interface Settings {
   withdrawalLimits: {
     min: number
     max: number
-  }
+  } // ✅ Không còn được sử dụng - đã loại bỏ giới hạn rút tiền
   tradingLimits: {
     min: number
     max: number

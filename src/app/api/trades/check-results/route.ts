@@ -99,6 +99,8 @@ export async function POST(req: Request) {
         const isWin = trade.direction.toLowerCase() === session.result?.toLowerCase();
         const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 90% tiền thắng (10 ăn 9)
         
+        console.log(`🎯 [TRADE RESULT] Trade ${trade._id}: direction=${trade.direction}, sessionResult=${session.result}, isWin=${isWin}, amount=${trade.amount}, profit=${profit}`);
+        
         // Cập nhật trạng thái lệnh
         bulkOps.push({
           updateOne: {
@@ -122,12 +124,21 @@ export async function POST(req: Request) {
         }
         
         const userUpdate = userUpdates.get(userId)!;
+        const oldAvailable = userUpdate.available;
+        const oldFrozen = userUpdate.frozen;
+        
         if (isWin) {
-          userUpdate.available += trade.amount + profit;
-          userUpdate.frozen -= trade.amount;
+          // ✅ SỬA LỖI: Khi thắng, cần:
+          // 1. Trả lại tiền gốc từ frozen về available
+          // 2. Cộng thêm profit vào available
+          userUpdate.available += trade.amount + profit; // Trả tiền gốc + cộng profit
+          userUpdate.frozen -= trade.amount; // Trừ tiền gốc khỏi frozen
         } else {
+          // Khi thua, chỉ trừ tiền gốc khỏi frozen
           userUpdate.frozen -= trade.amount;
         }
+        
+        console.log(`💰 [BALANCE UPDATE] User ${userId}: available ${oldAvailable} → ${userUpdate.available} (+${userUpdate.available - oldAvailable}), frozen ${oldFrozen} → ${userUpdate.frozen} (${userUpdate.frozen - oldFrozen > 0 ? '+' : ''}${userUpdate.frozen - oldFrozen})`);
       }
 
       // ⚡ TỐI ƯU: Thực hiện bulk update trades
@@ -139,6 +150,7 @@ export async function POST(req: Request) {
       // ⚡ TỐI ƯU: Thực hiện bulk update users
       const userBulkOps: any[] = [];
       userUpdates.forEach((update, userId) => {
+        console.log(`🔄 [USER UPDATE] User ${userId}: available +${update.available}, frozen ${update.frozen > 0 ? '+' : ''}${update.frozen}`);
         userBulkOps.push({
           updateOne: {
             filter: { _id: new ObjectId(userId) },

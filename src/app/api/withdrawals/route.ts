@@ -49,34 +49,27 @@ export async function POST(req: NextRequest) {
     }
     console.log('User found:', { username: user.username, balance: user.balance });
 
-    // Lấy cài đặt hệ thống để kiểm tra giới hạn rút tiền
-    let settings = null;
-    try {
-      settings = await db.collection('settings').findOne({});
-    } catch (error) {
-      console.log('Settings collection not found, using default limits');
-    }
-    
-    // Default limits if settings not found
-    const minWithdrawal = settings?.withdrawalLimits?.min || 100000; // 100k VND
-    const maxWithdrawal = settings?.withdrawalLimits?.max || 100000000; // 100M VND
-    
-    if (amount < minWithdrawal) {
-      return NextResponse.json({ 
-        message: `Số tiền rút tối thiểu là ${minWithdrawal.toLocaleString()} đ` 
-      }, { status: 400 });
-    }
-
-    if (amount > maxWithdrawal) {
-      return NextResponse.json({ 
-        message: `Số tiền rút tối đa là ${maxWithdrawal.toLocaleString()} đ` 
-      }, { status: 400 });
-    }
+    // ✅ Đã loại bỏ giới hạn rút tiền - User có thể rút bất kỳ số tiền nào (chỉ cần đủ số dư)
+    console.log('✅ Không có giới hạn rút tiền - User có thể rút bất kỳ số tiền nào');
 
     // Kiểm tra số dư
     if (user.balance < amount) {
       return NextResponse.json({ message: 'Số dư không đủ' }, { status: 400 });
     }
+
+    // ✅ TRỪ TIỀN NGAY LẬP TỨC khi user rút tiền
+    const newBalance = user.balance - amount;
+    await db.collection('users').updateOne(
+      { _id: new ObjectId(userId) },
+      { 
+        $set: { 
+          balance: newBalance,
+          updatedAt: new Date()
+        } 
+      }
+    );
+    
+    console.log(`💰 [WITHDRAWAL] Đã trừ ${amount} VND từ user ${user.username}. Số dư cũ: ${user.balance} VND, Số dư mới: ${newBalance} VND`);
 
     // Tạo yêu cầu rút tiền mới với ID theo định dạng RUT-username-timestamp
     const timestamp = new Date().getTime();
@@ -97,15 +90,13 @@ export async function POST(req: NextRequest) {
       updatedAt: new Date()
     };
 
-    console.log('Creating withdrawal record...');
     const result = await db.collection('withdrawals').insertOne(withdrawal);
-    console.log('Withdrawal record created with ID:', result.insertedId);
 
     // Gửi thông báo cho admin (có thể triển khai sau)
     // TODO: Gửi thông báo cho admin qua socket hoặc email
 
     return NextResponse.json({
-      message: 'Yêu cầu rút tiền đã được gửi',
+      message: 'Yêu cầu rút tiền đã được gửi và tiền đã bị trừ khỏi tài khoản. Vui lòng chờ admin xét duyệt.',
       withdrawalId: result.insertedId
     }, { status: 201 });
 

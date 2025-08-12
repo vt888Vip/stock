@@ -101,35 +101,8 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'approve') {
-      // Kiểm tra lại số dư user trước khi duyệt
-      const user = await db.collection('users').findOne({ _id: withdrawal.user });
-      if (!user) {
-        return NextResponse.json({ message: 'Không tìm thấy người dùng' }, { status: 404 });
-      }
-      
-      // Kiểm tra balance (có thể là object hoặc number)
-      const userBalance = user.balance || { available: 0, frozen: 0 };
-      const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-      
-      if (availableBalance < withdrawal.amount) {
-        return NextResponse.json({ 
-          message: `Số dư người dùng không đủ. Hiện tại: ${availableBalance.toLocaleString()} VND, Yêu cầu: ${withdrawal.amount.toLocaleString()} VND` 
-        }, { status: 400 });
-      }
-      
-      // Trừ tiền khỏi tài khoản user
-      const newBalance = availableBalance - withdrawal.amount;
-      await db.collection('users').updateOne(
-        { _id: withdrawal.user },
-        { 
-          $set: { 
-            balance: typeof userBalance === 'number' ? newBalance : { ...userBalance, available: newBalance },
-            updatedAt: new Date()
-          } 
-        }
-      );
-      
-      console.log(`[ADMIN WITHDRAWALS] Đã trừ ${withdrawal.amount} VND từ user ${user.username}. Số dư mới: ${newBalance} VND`);
+      // ✅ TIỀN ĐÃ BỊ TRỪ KHI USER RÚT - CHỈ CẬP NHẬT TRẠNG THÁI
+      console.log(`[ADMIN WITHDRAWALS] Duyệt yêu cầu rút tiền ${withdrawal.amount} VND của user ${withdrawal.username} - Tiền đã bị trừ trước đó`);
     }
 
     // Cập nhật trạng thái yêu cầu rút tiền
@@ -146,9 +119,25 @@ export async function POST(req: NextRequest) {
       { $set: updateData }
     );
 
-    // Nếu từ chối, không cần làm gì vì tiền chưa bị trừ
+    // Nếu từ chối, cần trả lại tiền cho user vì tiền đã bị trừ khi rút
     if (action === 'reject') {
-      console.log(`[ADMIN WITHDRAWALS] Đã từ chối yêu cầu rút tiền ${withdrawal.amount} VND của user ${withdrawal.username}`);
+      const user = await db.collection('users').findOne({ _id: withdrawal.user });
+      if (user) {
+        const userBalance = user.balance || 0;
+        const newBalance = userBalance + withdrawal.amount;
+        
+        await db.collection('users').updateOne(
+          { _id: withdrawal.user },
+          { 
+            $set: { 
+              balance: newBalance,
+              updatedAt: new Date()
+            } 
+          }
+        );
+        
+        console.log(`💰 [ADMIN WITHDRAWALS] Đã từ chối và trả lại ${withdrawal.amount} VND cho user ${user.username}. Số dư cũ: ${userBalance} VND, Số dư mới: ${newBalance} VND`);
+      }
     }
 
     return NextResponse.json({

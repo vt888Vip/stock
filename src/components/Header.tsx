@@ -139,10 +139,10 @@ export default function Header() {
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="h-8 w-8"
+                  className="h-10 w-10"
                   onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
                 >
-                  {isMobileMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+                  {isMobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
                 </Button>
                 
                                  {/* Avatar button with dropdown */}
@@ -151,13 +151,13 @@ export default function Header() {
                      <Button 
                        variant="ghost" 
                        size="icon" 
-                       className="rounded-full overflow-hidden h-6 w-6"
+                       className="rounded-full overflow-hidden h-8 w-8"
                      >
                        <Image 
                          src={user.avatar || "/avatars/default.png"} 
                          alt={user.username || "User"} 
-                         width={24} 
-                         height={24} 
+                         width={32} 
+                         height={32} 
                          className="h-full w-full object-cover"
                        />
                      </Button>
@@ -252,37 +252,26 @@ export default function Header() {
               </DropdownMenu>
            </div>
                          ) : (
-               <div className="flex items-center gap-1">
-                 <Link href="/login">
-                   <Button 
-                     variant="default" 
-                     size="sm" 
-                     className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-1.5 sm:px-3 h-7 sm:h-9"
-                   >
-                     <span className="hidden sm:inline">Đăng nhập</span>
-                     <span className="sm:hidden">Đăng nhập</span>
-                   </Button>
-                 </Link>
-                 <Link href="/register">
-                   <Button 
-                     variant="outline" 
-                     size="sm" 
-                     className="border-blue-600 text-blue-600 hover:bg-blue-50 text-xs px-1.5 sm:px-3 h-7 sm:h-9"
-                   >
-                     <span className="hidden sm:inline">Mở tài khoản</span>
-                     <span className="sm:hidden">Đăng ký</span>
-                   </Button>
-                 </Link>
-                 <Button 
-                   variant="ghost" 
-                   size="sm" 
-                   className="text-blue-600 hover:bg-blue-50 gap-1 px-1 sm:px-2 h-7 sm:h-9"
-                   onClick={() => window.open("https://t.me/DICHVUCSKHLSE", "_blank")}
-                 >
-                   <Headphones className="h-3 w-3 sm:h-4 sm:w-4" />
-                   <span className="hidden sm:inline">CSKH</span>
-                 </Button>
-               </div>
+                               <div className="flex items-center gap-2">
+                  <Link href="/login">
+                    <Button 
+                      variant="default" 
+                      size="sm" 
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-2 h-9"
+                    >
+                      <span>Đăng nhập</span>
+                    </Button>
+                  </Link>
+                  <Link href="/register">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="border-blue-600 text-blue-600 hover:bg-blue-50 text-xs px-3 py-2 h-9"
+                    >
+                      <span>Đăng ký</span>
+                    </Button>
+                  </Link>
+                </div>
              )}
         </div>
       </div>
@@ -304,100 +293,163 @@ export default function Header() {
               variant="ghost" 
               size="icon" 
               onClick={() => setIsMobileMenuOpen(false)}
-              className="text-gray-500"
+              className="text-gray-500 h-10 w-10"
             >
-              <X className="h-6 w-6" />
+              <X className="h-7 w-7" />
             </Button>
           </div>
           
           <div className="flex-1 overflow-auto">
-            <nav className="flex flex-col w-full">
-              <Link 
-                href="/" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Trang chủ
-              </Link>
-              <Link 
-                href="/trade" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Giao dịch
-              </Link>
-              <Link 
-                href="/transaction-history" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Lịch sử giao dịch
-              </Link>
-              <Link 
-                href="/account" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Tổng quan tài khoản
-              </Link>
-              <Link 
-                href="/account?tab=password" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Đổi mật khẩu
-              </Link>
-              <Link 
-                href="/account?tab=verification" 
-                className="py-4 px-5 border-b border-gray-200 text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Xác minh danh tính
-              </Link>
-            </nav>
-            
-            <div className="grid grid-cols-2 gap-4 p-5 mt-4">
-              <Link 
-                href="/deposit" 
-                className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Nạp tiền
-              </Link>
-              <Link 
-                href="/withdraw" 
-                className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
-                onClick={() => setIsMobileMenuOpen(false)}
-              >
-                Rút tiền
-              </Link>
-            </div>
-            
-            {/* CSKH button for mobile */}
-            <div className="px-5 pb-4">
-                             <button 
-                 onClick={() => {
-                   setIsMobileMenuOpen(false)
-                   window.open("https://t.me/DICHVUCSKHLSE", "_blank")
-                 }}
-                 className="w-full bg-blue-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base gap-2"
-               >
-                 <Headphones className="h-4 w-4" />
-                 Chăm sóc khách hàng
-               </button>
-            </div>
-            
-            <div className="px-5 pb-6">
-              <button 
-                onClick={() => {
-                  setIsMobileMenuOpen(false)
-                  handleLogout()
-                }}
-                className="w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-md flex justify-center items-center font-medium text-base"
-              >
-                Đăng xuất
-              </button>
-            </div>
+            {user ? (
+              // Mobile menu khi đã đăng nhập
+              <>
+                <nav className="flex flex-col w-full">
+                  <Link 
+                    href="/" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Trang chủ
+                  </Link>
+                  <Link 
+                    href="/trade" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Giao dịch
+                  </Link>
+                  <Link 
+                    href="/transaction-history" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Lịch sử giao dịch
+                  </Link>
+                  <Link 
+                    href="/account" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Tổng quan tài khoản
+                  </Link>
+                  <Link 
+                    href="/account?tab=password" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Đổi mật khẩu
+                  </Link>
+                  <Link 
+                    href="/account?tab=verification" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Xác minh danh tính
+                  </Link>
+                </nav>
+                
+                <div className="grid grid-cols-2 gap-4 p-5 mt-4">
+                  <Link 
+                    href="/deposit" 
+                    className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Nạp tiền
+                  </Link>
+                  <Link 
+                    href="/withdraw" 
+                    className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Rút tiền
+                  </Link>
+                </div>
+                
+                {/* CSKH button for mobile */}
+                <div className="px-5 pb-4">
+                  <button 
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      window.open("https://t.me/DICHVUCSKHLSE", "_blank")
+                    }}
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base gap-2"
+                  >
+                    <Headphones className="h-4 w-4" />
+                    Chăm sóc khách hàng
+                  </button>
+                </div>
+                
+                <div className="px-5 pb-6">
+                  <button 
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      handleLogout()
+                    }}
+                    className="w-full bg-white border border-gray-300 text-gray-700 py-3 rounded-md flex justify-center items-center font-medium text-base"
+                  >
+                    Đăng xuất
+                  </button>
+                </div>
+              </>
+            ) : (
+              // Mobile menu khi chưa đăng nhập
+              <>
+                <nav className="flex flex-col w-full">
+                  <Link 
+                    href="/" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Trang chủ
+                  </Link>
+                  <Link 
+                    href="/about" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Giới thiệu
+                  </Link>
+                  <Link 
+                    href="/contact" 
+                    className="py-4 px-5 border-b border-gray-200 text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Liên hệ
+                  </Link>
+                </nav>
+                
+                <div className="grid grid-cols-2 gap-4 p-5 mt-4">
+                  <Link 
+                    href="/login" 
+                    className="bg-blue-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Đăng nhập
+                  </Link>
+                  <Link 
+                    href="/register" 
+                    className="bg-green-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base"
+                    onClick={() => setIsMobileMenuOpen(false)}
+                  >
+                    Đăng ký
+                  </Link>
+                </div>
+                
+                {/* CSKH button for mobile */}
+                <div className="px-5 pb-4">
+                  <button 
+                    onClick={() => {
+                      setIsMobileMenuOpen(false)
+                      window.open("https://t.me/DICHVUCSKHLSE", "_blank")
+                    }}
+                    className="w-full bg-blue-600 text-white py-3 px-4 rounded-md flex justify-center items-center font-medium text-base gap-2"
+                  >
+                    <Headphones className="h-4 w-4" />
+                    Chăm sóc khách hàng
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

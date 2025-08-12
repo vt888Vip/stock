@@ -180,34 +180,6 @@ export default function WithdrawPage() {
             </Card>
           ) : (
             <>
-              {/* Thông tin ngân hàng */}
-              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
-                <CardHeader className="pb-3">
-                  <CardTitle className="flex items-center gap-2 text-base">
-                    <Building2 className="h-4 w-4 text-blue-600" />
-                    Thông tin tài khoản ngân hàng
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
-                     <div className="space-y-2">
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Tên ngân hàng:</span>
-                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.name || 'N/A'}</span>
-                       </div>
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Số tài khoản:</span>
-                         <span className="font-mono text-xs sm:text-sm font-bold text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
-                       </div>
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Chủ tài khoản:</span>
-                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
-                       </div>
-                     </div>
-                   </div>
-                </CardContent>
-              </Card>
-
               {/* Form rút tiền */}
               <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
                 <CardHeader className="pb-3">
@@ -226,6 +198,7 @@ export default function WithdrawPage() {
                        placeholder="Nhập số tiền muốn rút"
                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
                      />
+                     <p className="text-xs text-slate-500 mt-1">✅ Không có giới hạn rút tiền - chỉ cần đủ số dư</p>
                    </div>
 
                                      {/* Thông tin chi tiết */}
@@ -270,7 +243,33 @@ export default function WithdrawPage() {
                  </CardContent>
                </Card>
 
-
+              {/* Thông tin ngân hàng */}
+              <Card className="shadow-xl border-0 bg-white/95 backdrop-blur-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Building2 className="h-4 w-4 text-blue-600" />
+                    Thông tin tài khoản ngân hàng
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                                     <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
+                     <div className="space-y-2">
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Tên ngân hàng:</span>
+                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.name || 'N/A'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Số tài khoản:</span>
+                         <span className="font-mono text-xs sm:text-sm font-bold text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
+                       </div>
+                       <div className="flex justify-between items-center">
+                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Chủ tài khoản:</span>
+                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
+                       </div>
+                     </div>
+                   </div>
+                </CardContent>
+              </Card>
              </>
            )}
         </div>

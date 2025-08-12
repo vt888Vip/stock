@@ -138,23 +138,25 @@ export async function POST(request: NextRequest) {
             }
           );
 
-          // Cập nhật số dư user
-          if (isWin) {
-            // Thắng: trả lại tiền cược + lợi nhuận
-            await db.collection('users').updateOne(
-              { _id: new ObjectId(trade.userId) },
-              { 
-                $inc: { 
-                  'balance.available': profit + trade.amount,
-                  'balance.frozen': -trade.amount 
-                },
-                $set: { updatedAt: now }
-              }
-            );
-            totalWins++;
-            totalWinAmount += profit + trade.amount;
-            console.log(`💰 User ${trade.userId} thắng: +${profit + trade.amount} VND`);
-          } else {
+                        // Cập nhật số dư user
+              if (isWin) {
+                // ✅ SỬA LỖI: Khi thắng, cần:
+                // 1. Trả lại tiền gốc từ frozen về available
+                // 2. Cộng thêm profit vào available
+                await db.collection('users').updateOne(
+                  { _id: new ObjectId(trade.userId) },
+                  { 
+                    $inc: { 
+                      'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
+                      'balance.frozen': -trade.amount 
+                    },
+                    $set: { updatedAt: now }
+                  }
+                );
+                totalWins++;
+                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
+                console.log(`💰 User ${trade.userId} thắng: +${trade.amount + profit} VND (tiền gốc + profit)`);
+              } else {
             // Thua: chỉ trừ tiền cược (đã bị đóng băng)
             await db.collection('users').updateOne(
               { _id: new ObjectId(trade.userId) },
@@ -264,18 +266,21 @@ export async function POST(request: NextRequest) {
 
               // Cập nhật số dư user
               if (isWin) {
+                // ✅ SỬA LỖI: Khi thắng, cần:
+                // 1. Trả lại tiền gốc từ frozen về available
+                // 2. Cộng thêm profit vào available
                 await db.collection('users').updateOne(
                   { _id: new ObjectId(trade.userId) },
                   { 
                     $inc: { 
-                      'balance.available': profit + trade.amount,
+                      'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
                       'balance.frozen': -trade.amount 
                     },
                     $set: { updatedAt: now }
                   }
                 );
                 totalWins++;
-                totalWinAmount += profit + trade.amount;
+                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
               } else {
                 await db.collection('users').updateOne(
                   { _id: new ObjectId(trade.userId) },
@@ -375,18 +380,21 @@ export async function POST(request: NextRequest) {
 
               // Cập nhật số dư user
               if (isWin) {
+                // ✅ SỬA LỖI: Khi thắng, cần:
+                // 1. Trả lại tiền gốc từ frozen về available
+                // 2. Cộng thêm profit vào available
                 await db.collection('users').updateOne(
                   { _id: new ObjectId(trade.userId) },
                   { 
                     $inc: { 
-                      'balance.available': profit + trade.amount,
+                      'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
                       'balance.frozen': -trade.amount 
                     },
                     $set: { updatedAt: now }
                   }
                 );
                 totalWins++;
-                totalWinAmount += profit + trade.amount;
+                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
               } else {
                 await db.collection('users').updateOne(
                   { _id: new ObjectId(trade.userId) },

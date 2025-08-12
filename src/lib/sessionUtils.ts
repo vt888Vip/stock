@@ -115,18 +115,20 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
 
         // 6. Cập nhật số dư user
         if (isWin) {
-          // Thắng: trả lại tiền cược + lợi nhuận
+          // ✅ SỬA LỖI: Khi thắng, cần:
+          // 1. Trả lại tiền gốc từ frozen về available
+          // 2. Cộng thêm profit vào available
           await db.collection('users').updateOne(
             { _id: new ObjectId(trade.userId) },
             { 
               $inc: { 
-                'balance.available': profit + trade.amount,
+                'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
                 'balance.frozen': -trade.amount 
               },
               $set: { updatedAt: now }
             }
           );
-          console.log(`💰 [${apiName}] User ${trade.userId} thắng: +${profit + trade.amount} VND`);
+          console.log(`💰 [${apiName}] User ${trade.userId} thắng: +${trade.amount + profit} VND (tiền gốc + profit)`);
         } else {
           // Thua: chỉ trừ tiền cược (đã bị đóng băng)
           await db.collection('users').updateOne(

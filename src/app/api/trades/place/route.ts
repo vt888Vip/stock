@@ -83,6 +83,8 @@ export async function POST(req: Request) {
       const currentFrozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
       const newFrozenBalance = currentFrozenBalance + amount;
 
+      console.log(`💰 [PLACE TRADE] User ${userData.username}: available ${availableBalance} → ${newAvailableBalance} (-${amount}), frozen ${currentFrozenBalance} → ${newFrozenBalance} (+${amount})`);
+
       const updateUserResult = await db.collection('users').updateOne(
         { _id: new ObjectId(user.userId) },
         {

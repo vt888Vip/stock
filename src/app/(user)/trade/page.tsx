@@ -837,6 +837,29 @@ export default function TradePage() {
                           <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
                           <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
                           <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                          <div className="mt-1 pt-1 border-t border-blue-300">
+                            <button 
+                              onClick={async () => {
+                                try {
+                                  const response = await fetch('/api/test-balance', {
+                                    headers: {
+                                      'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                                    }
+                                  });
+                                  const data = await response.json();
+                                  if (data.success) {
+                                    console.log('🔍 [DEBUG] Balance Test Result:', data.data);
+                                    alert(`Current: ${data.data.currentBalance.available} | Calculated: ${data.data.calculatedBalance.available}`);
+                                  }
+                                } catch (error) {
+                                  console.error('Debug balance error:', error);
+                                }
+                              }}
+                              className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                            >
+                              Test Balance
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -1035,6 +1058,29 @@ export default function TradePage() {
                         <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
                         <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
                         <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                        <div className="mt-1 pt-1 border-t border-blue-300">
+                          <button 
+                            onClick={async () => {
+                              try {
+                                const response = await fetch('/api/test-balance', {
+                                  headers: {
+                                    'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                                  }
+                                });
+                                const data = await response.json();
+                                if (data.success) {
+                                  console.log('🔍 [DEBUG] Balance Test Result:', data.data);
+                                  alert(`Current: ${data.data.currentBalance.available} | Calculated: ${data.data.calculatedBalance.available}`);
+                                }
+                              } catch (error) {
+                                console.error('Debug balance error:', error);
+                              }
+                            }}
+                            className="text-xs bg-blue-600 text-white px-2 py-1 rounded hover:bg-blue-700"
+                          >
+                            Test Balance
+                          </button>
+                        </div>
                       </div>
                     )}
                   </div>

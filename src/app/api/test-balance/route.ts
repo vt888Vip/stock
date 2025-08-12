@@ -1,11 +1,12 @@
-import { NextResponse } from 'next/server';
+import { NextResponse, NextRequest } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
 
-export async function POST(req: Request) {
+export async function GET(request: NextRequest) {
   try {
-    const authHeader = req.headers.get('authorization');
+    // Xác thực user
+    const authHeader = request.headers.get('authorization');
     if (!authHeader) {
       return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
     }
@@ -17,117 +18,78 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Invalid token' }, { status: 401 });
     }
 
-    const { action, sessionId } = await req.json();
     const db = await getMongoDb();
+    
+    // Lấy thông tin user hiện tại
+    const userData = await db.collection('users').findOne({ _id: new ObjectId(user.userId) });
+    if (!userData) {
+      return NextResponse.json({ message: 'User not found' }, { status: 404 });
+    }
 
-    if (action === 'check_trade') {
-      // Kiểm tra lệnh của user cho phiên cụ thể
-      const trade = await db.collection('trades').findOne({
-        userId: new ObjectId(user.userId),
-        sessionId: sessionId
-      });
+    // Lấy balance hiện tại
+    const currentBalance = userData.balance || { available: 0, frozen: 0 };
+    const availableBalance = typeof currentBalance === 'number' ? currentBalance : currentBalance.available || 0;
+    const frozenBalance = typeof currentBalance === 'number' ? 0 : currentBalance.frozen || 0;
 
-      if (!trade) {
-        return NextResponse.json({
-          success: false,
-          message: 'Không tìm thấy lệnh cho phiên này'
-        });
+    // Lấy lịch sử trades gần đây
+    const recentTrades = await db.collection('trades')
+      .find({ userId: new ObjectId(user.userId) })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .toArray();
+
+    // Tính toán balance theo logic mới
+    let calculatedAvailable = availableBalance;
+    let calculatedFrozen = frozenBalance;
+
+    for (const trade of recentTrades) {
+      if (trade.status === 'pending') {
+        // Trade đang pending: tiền đã bị trừ khỏi available và cộng vào frozen
+        // Không cần thay đổi gì
+      } else if (trade.status === 'completed') {
+        if (trade.result === 'win') {
+          // Trade thắng: tiền gốc đã được trả từ frozen về available, cộng thêm profit
+          calculatedAvailable += (trade.amount || 0) + (trade.profit || 0);
+          calculatedFrozen -= trade.amount || 0;
+        } else if (trade.result === 'lose') {
+          // Trade thua: tiền gốc đã bị trừ khỏi frozen
+          calculatedFrozen -= trade.amount;
+        }
       }
+    }
 
-      return NextResponse.json({
-        success: true,
-        trade: {
-          _id: trade._id.toString(),
+    return NextResponse.json({
+      success: true,
+      data: {
+        currentBalance: {
+          available: availableBalance,
+          frozen: frozenBalance,
+          total: availableBalance + frozenBalance
+        },
+        calculatedBalance: {
+          available: calculatedAvailable,
+          frozen: calculatedFrozen,
+          total: calculatedAvailable + calculatedFrozen
+        },
+        recentTrades: recentTrades.map(trade => ({
+          id: trade._id,
           sessionId: trade.sessionId,
           direction: trade.direction,
           amount: trade.amount,
           status: trade.status,
           result: trade.result,
           profit: trade.profit,
-          sessionResult: trade.sessionResult
-        }
-      });
-    }
-
-    if (action === 'update_balance') {
-      // Cập nhật số dư cho lệnh thắng
-      const trade = await db.collection('trades').findOne({
-        userId: new ObjectId(user.userId),
-        sessionId: sessionId,
-        result: 'win'
-      });
-
-      if (!trade) {
-        return NextResponse.json({
-          success: false,
-          message: 'Không tìm thấy lệnh thắng cho phiên này'
-        });
+          createdAt: trade.createdAt
+        }))
       }
-
-      // Lấy thông tin user hiện tại
-      const userData = await db.collection('users').findOne({ _id: new ObjectId(user.userId) });
-      if (!userData) {
-        return NextResponse.json({
-          success: false,
-          message: 'Không tìm thấy thông tin user'
-        });
-      }
-
-      const userBalance = userData.balance || { available: 0, frozen: 0 };
-      const currentAvailable = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
-      
-      // Tính toán số dư mới: số dư hiện tại + tiền đặt cược + tiền thắng
-      const newBalance = currentAvailable + trade.amount + trade.profit;
-      
-      // Cập nhật số dư
-      await db.collection('users').updateOne(
-        { _id: new ObjectId(user.userId) },
-        {
-          $set: {
-            balance: {
-              available: newBalance,
-              frozen: typeof userBalance === 'number' ? 0 : userBalance.frozen || 0
-            },
-            updatedAt: new Date()
-          }
-        }
-      );
-
-      // Cập nhật trạng thái lệnh thành completed
-      await db.collection('trades').updateOne(
-        { _id: trade._id },
-        {
-          $set: {
-            status: 'completed',
-            publishedAt: new Date(),
-            updatedAt: new Date()
-          }
-        }
-      );
-
-      return NextResponse.json({
-        success: true,
-        message: 'Đã cập nhật số dư thành công',
-        data: {
-          oldBalance: currentAvailable,
-          newBalance: newBalance,
-          tradeAmount: trade.amount,
-          profit: trade.profit,
-          totalAdded: trade.amount + trade.profit
-        }
-      });
-    }
-
-    return NextResponse.json({
-      success: false,
-      message: 'Hành động không hợp lệ'
     });
 
   } catch (error) {
-    console.error('Lỗi khi test balance:', error);
-    return NextResponse.json(
-      { success: false, message: 'Lỗi máy chủ nội bộ' },
-      { status: 500 }
-    );
+    console.error('Test balance error:', error);
+    return NextResponse.json({ 
+      success: false, 
+      message: 'Lỗi khi test balance',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, { status: 500 });
   }
 } 
