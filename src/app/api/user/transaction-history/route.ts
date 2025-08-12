@@ -63,11 +63,12 @@ export async function GET(request: NextRequest) {
         type: 'deposit',
         amount: deposit.amount,
         status: deposit.status,
-        description: `Nạp tiền - ${userBankInfo.name || 'Ngân hàng'}`,
+        description: `Nạp tiền - ${deposit.bankInfo?.bankName || userBankInfo.name || 'Ngân hàng'}`,
         createdAt: deposit.createdAt,
         updatedAt: deposit.updatedAt,
         proofImage: deposit.proofImage || null,
-        bankInfo: {
+        // ✅ SỬA: Sử dụng thông tin ngân hàng riêng của deposit nếu có, nếu không thì dùng thông tin chung
+        bankInfo: deposit.bankInfo || {
           bankName: userBankInfo.name || '',
           accountNumber: userBankInfo.accountNumber || '',
           accountName: userBankInfo.accountHolder || ''
@@ -94,13 +95,14 @@ export async function GET(request: NextRequest) {
           type: 'withdrawal',
           amount: withdrawal.amount,
           status: withdrawal.status,
-          description: `Rút tiền - ${userBankInfo.name || 'Ngân hàng'}`,
+          description: `Rút tiền - ${withdrawal.bankName || userBankInfo.name || 'Ngân hàng'}`,
           createdAt: withdrawal.createdAt,
           updatedAt: withdrawal.updatedAt,
+          // ✅ SỬA: Sử dụng thông tin ngân hàng riêng của withdrawal
           bankInfo: {
-            bankName: userBankInfo.name || '',
-            accountNumber: userBankInfo.accountNumber || '',
-            accountName: userBankInfo.accountHolder || ''
+            bankName: withdrawal.bankName || '',
+            accountNumber: withdrawal.bankAccountNumber || '',
+            accountName: withdrawal.accountHolder || ''
           },
           adminNote: withdrawal.adminNote
         };

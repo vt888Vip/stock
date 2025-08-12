@@ -47,10 +47,6 @@ export async function POST(req: NextRequest) {
       console.log('User not found');
       return NextResponse.json({ message: 'Không tìm thấy người dùng' }, { status: 404 });
     }
-    console.log('User found:', { username: user.username, balance: user.balance });
-
-    // ✅ Đã loại bỏ giới hạn rút tiền - User có thể rút bất kỳ số tiền nào (chỉ cần đủ số dư)
-    console.log('✅ Không có giới hạn rút tiền - User có thể rút bất kỳ số tiền nào');
 
     // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
     let userBalance = user.balance || { available: 0, frozen: 0 };

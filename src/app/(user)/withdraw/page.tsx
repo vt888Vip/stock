@@ -198,7 +198,6 @@ export default function WithdrawPage() {
                        placeholder="Nhập số tiền muốn rút"
                        className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 text-sm"
                      />
-                     <p className="text-xs text-slate-500 mt-1">✅ Không có giới hạn rút tiền - chỉ cần đủ số dư</p>
                    </div>
 
                                      {/* Thông tin chi tiết */}
