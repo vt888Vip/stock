@@ -43,133 +43,137 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Database connection failed' }, { status: 500 });
     }
 
-    try {
-      // 1. Kiểm tra và lấy thông tin user
-      const userData = await db.collection('users').findOne(
-        { _id: new ObjectId(user.userId) }
-      );
-      
-      if (!userData) {
-        throw new Error('User not found');
-      }
+    // ✅ GIẢI PHÁP ĐƠN GIẢN: Kiểm tra trùng lặp trade trước
+    const existingTrade = await db.collection('trades').findOne({
+      sessionId,
+      userId: new ObjectId(user.userId),
+      status: 'pending'
+    });
 
-      // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
-      let userBalance = userData.balance || { available: 0, frozen: 0 };
-      
-      // Nếu balance là number (kiểu cũ), chuyển đổi thành object
-      if (typeof userBalance === 'number') {
-        userBalance = {
-          available: userBalance,
-          frozen: 0
-        };
-        
-        // Cập nhật database để chuyển đổi sang kiểu mới
-        await db.collection('users').updateOne(
-          { _id: new ObjectId(user.userId) },
-          { 
-            $set: { 
-              balance: userBalance,
-              updatedAt: new Date()
-            } 
-          }
-        );
-        
-        console.log(`🔄 [PLACE TRADE MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
-      }
-      
-      const availableBalance = userBalance.available || 0;
-      
-      if (availableBalance < amount) {
-        throw new Error('Insufficient balance');
-      }
-
-      // 3. Kiểm tra phiên giao dịch
-      const tradingSession = await db.collection('trading_sessions').findOne(
-        { 
-          sessionId,
-          status: { $in: ['ACTIVE', 'PREDICTED'] }
-        }
-      );
-
-      if (!tradingSession) {
-        throw new Error('Trading session not found or not active');
-      }
-
-      // Kiểm tra phiên đã kết thúc chưa
-      if (tradingSession.endTime <= new Date()) {
-        throw new Error('Trading session has ended');
-      }
-
-      // 4. Trừ tiền khỏi available balance và cộng vào frozen balance
-      const newAvailableBalance = availableBalance - amount;
-      const currentFrozenBalance = userBalance.frozen || 0;
-      const newFrozenBalance = currentFrozenBalance + amount;
-
-      console.log(`💰 [PLACE TRADE] User ${userData.username}: available ${availableBalance} → ${newAvailableBalance} (-${amount}), frozen ${currentFrozenBalance} → ${newFrozenBalance} (+${amount})`);
-
-      const updateUserResult = await db.collection('users').updateOne(
-        { _id: new ObjectId(user.userId) },
-        {
-          $set: {
-            balance: {
-              available: newAvailableBalance,
-              frozen: newFrozenBalance
-            },
-            updatedAt: new Date()
-          }
-        }
-      );
-
-      if (updateUserResult.modifiedCount === 0) {
-        throw new Error('Failed to update user balance');
-      }
-
-      // 5. Tạo lệnh giao dịch
-      const trade = {
-        sessionId,
-        userId: new ObjectId(user.userId),
-        direction,
-        amount: Number(amount),
-        status: 'pending',
-        createdAt: new Date(),
-        updatedAt: new Date()
-      };
-
-      console.log('API /trades/place - Insert trade:', trade);
-      const tradeResult = await db.collection('trades').insertOne(trade);
-      console.log('API /trades/place - Insert result:', tradeResult);
-
-      if (!tradeResult.insertedId) {
-        throw new Error('Failed to create trade');
-      }
-
-      // Lấy lại lệnh vừa insert để trả về frontend
-      const insertedTrade = await db.collection('trades').findOne({ _id: tradeResult.insertedId });
-      if (!insertedTrade) {
-        throw new Error('Inserted trade not found');
-      }
-
-      // Thành công
-      return NextResponse.json({
-        success: true,
-        message: 'Trade placed successfully',
-        trade: {
-          ...insertedTrade,
-          _id: insertedTrade._id.toString(),
-          userId: insertedTrade.userId.toString()
-        },
-        data: {
-          sessionId,
-          direction,
-          amount,
-          asset
-        }
-      });
-
-    } catch (error) {
-      console.error('Error placing trade:', error);
-      throw error;
+    if (existingTrade) {
+      return NextResponse.json({ 
+        success: false,
+        message: 'Bạn đã có lệnh đang chờ kết quả cho phiên này' 
+      }, { status: 400 });
     }
+
+    // 1. Kiểm tra và lấy thông tin user
+    const userData = await db.collection('users').findOne(
+      { _id: new ObjectId(user.userId) }
+    );
+    
+    if (!userData) {
+      throw new Error('User not found');
+    }
+
+    // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
+    let userBalance = userData.balance || { available: 0, frozen: 0 };
+    
+    // Nếu balance là number (kiểu cũ), chuyển đổi thành object
+    if (typeof userBalance === 'number') {
+      userBalance = {
+        available: userBalance,
+        frozen: 0
+      };
+      
+      // Cập nhật database để chuyển đổi sang kiểu mới
+      await db.collection('users').updateOne(
+        { _id: new ObjectId(user.userId) },
+        { 
+          $set: { 
+            balance: userBalance,
+            updatedAt: new Date()
+          } 
+        }
+      );
+      
+      console.log(`🔄 [PLACE TRADE MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
+    }
+    
+    const availableBalance = userBalance.available || 0;
+    
+    if (availableBalance < amount) {
+      throw new Error('Insufficient balance');
+    }
+
+    // 2. Kiểm tra phiên giao dịch
+    const tradingSession = await db.collection('trading_sessions').findOne(
+      { 
+        sessionId,
+        status: { $in: ['ACTIVE', 'PREDICTED'] }
+      }
+    );
+
+    if (!tradingSession) {
+      throw new Error('Trading session not found or not active');
+    }
+
+    // Kiểm tra phiên đã kết thúc chưa
+    if (tradingSession.endTime <= new Date()) {
+      throw new Error('Trading session has ended');
+    }
+
+    // ✅ GIẢI PHÁP ĐƠN GIẢN: Sử dụng $inc để tránh race condition
+    const updateUserResult = await db.collection('users').updateOne(
+      { 
+        _id: new ObjectId(user.userId),
+        'balance.available': { $gte: amount } // ✅ Kiểm tra balance vẫn đủ
+      },
+      {
+        $inc: {
+          'balance.available': -amount,
+          'balance.frozen': amount
+        },
+        $set: { updatedAt: new Date() }
+      }
+    );
+
+    if (updateUserResult.modifiedCount === 0) {
+      throw new Error('Insufficient balance or user not found');
+    }
+
+    // 3. Tạo lệnh giao dịch
+    const trade = {
+      sessionId,
+      userId: new ObjectId(user.userId),
+      direction,
+      amount: Number(amount),
+      asset,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    console.log('API /trades/place - Insert trade:', trade);
+    const tradeResult = await db.collection('trades').insertOne(trade);
+    console.log('API /trades/place - Insert result:', tradeResult);
+
+    if (!tradeResult.insertedId) {
+      throw new Error('Failed to create trade');
+    }
+
+    // Lấy lại lệnh vừa insert để trả về frontend
+    const insertedTrade = await db.collection('trades').findOne({ _id: tradeResult.insertedId });
+    if (!insertedTrade) {
+      throw new Error('Inserted trade not found');
+    }
+
+    // Thành công
+    return NextResponse.json({
+      success: true,
+      message: 'Trade placed successfully',
+      trade: {
+        ...insertedTrade,
+        _id: insertedTrade._id.toString(),
+        userId: insertedTrade.userId.toString()
+      },
+      data: {
+        sessionId,
+        direction,
+        amount,
+        asset
+      }
+    });
 
   } catch (error) {
     console.error('Error placing trade:', error);

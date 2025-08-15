@@ -119,6 +119,7 @@ export async function POST(request: NextRequest) {
               }
             });
 
+            // ✅ SỬA: Không tích lũy trong API, để database xử lý hoàn toàn
             // Tích lũy user balance updates
             const userId = trade.userId.toString();
             if (!userUpdates.has(userId)) {
@@ -127,11 +128,13 @@ export async function POST(request: NextRequest) {
             
             const userUpdate = userUpdates.get(userId)!;
             if (isWin) {
-              userUpdate.available += trade.amount + profit;
-              userUpdate.frozen -= trade.amount;
+              // ✅ SỬA: Chỉ lưu thông tin để database tính toán
+              userUpdate.available += profit; // Chỉ cộng profit (900)
+              userUpdate.frozen -= trade.amount; // Trừ amount gốc khỏi frozen
               totalWins++;
               totalWinAmount += trade.amount + profit;
             } else {
+              // Khi thua, chỉ trừ amount gốc khỏi frozen
               userUpdate.frozen -= trade.amount;
               totalLosses++;
               totalLossAmount += trade.amount;
@@ -144,27 +147,53 @@ export async function POST(request: NextRequest) {
             console.log(`✅ Updated ${bulkTradesOps.length} trades`);
           }
 
-          // 7. Thực hiện bulk update users - tối ưu hóa
-          const bulkUsersOps: any[] = [];
-          userUpdates.forEach((update, userId) => {
-            bulkUsersOps.push({
-              updateOne: {
-                filter: { _id: new ObjectId(userId) },
-                update: {
-                  $inc: {
-                    'balance.available': update.available,
-                    'balance.frozen': update.frozen
-                  },
-                  $set: { updatedAt: new Date() }
-                }
-              }
-            });
-          });
+          // 7. ✅ SỬA: Để database tính toán hoàn toàn - KHÔNG CÒN RACE CONDITION
+          for (const [userId, update] of Array.from(userUpdates.entries())) {
+            try {
+              // ✅ SỬA: Sử dụng MongoDB aggregation để database tính toán hoàn toàn
+              const updateResult = await db.collection('users').updateOne(
+                { _id: new ObjectId(userId) },
+                [
+                  {
+                    $set: {
+                      // Database tự động tính toán balance mới
+                      balance: {
+                        available: {
+                          $add: [
+                            { $ifNull: ['$balance.available', 0] },
+                            update.available
+                          ]
+                        },
+                        frozen: {
+                          $add: [
+                            { $ifNull: ['$balance.frozen', 0] },
+                            update.frozen
+                          ]
+                        }
+                      },
+                      updatedAt: new Date()
+                    }
+                  }
+                ],
+                { session: dbSession }
+              );
 
-          if (bulkUsersOps.length > 0) {
-            await db.collection('users').bulkWrite(bulkUsersOps, { session: dbSession });
-            console.log(`✅ Updated ${bulkUsersOps.length} users`);
+              if (updateResult.modifiedCount > 0) {
+                console.log(`💰 [USER UPDATE] User ${userId}: available +${update.available}, frozen ${update.frozen > 0 ? '+' : ''}${update.frozen}`);
+              } else {
+                console.error(`❌ [USER UPDATE] Không thể cập nhật user ${userId}`);
+              }
+
+            } catch (error) {
+              console.error(`❌ [USER UPDATE] Lỗi khi cập nhật user ${userId}:`, error);
+            }
           }
+
+          // Xóa phần bulk update cũ để tránh cộng dồn
+          // if (bulkUsersOps.length > 0) {
+          //   await db.collection('users').bulkWrite(bulkUsersOps, { session: dbSession });
+          //   console.log(`✅ Updated ${bulkUsersOps.length} users`);
+          // }
 
           // 8. Cập nhật trạng thái phiên giao dịch
           await db.collection('trading_sessions').updateOne(
