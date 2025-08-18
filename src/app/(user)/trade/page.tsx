@@ -127,6 +127,7 @@ export default function TradePage() {
   const [countdownStarted, setCountdownStarted] = useState(false);
   const [isBalanceLocked, setIsBalanceLocked] = useState(false);
   const [lastBalanceSync, setLastBalanceSync] = useState<number>(0);
+  const [tradesInCurrentSession, setTradesInCurrentSession] = useState<number>(0);
 
   // Load user balance and current session
   useEffect(() => {
@@ -138,11 +139,14 @@ export default function TradePage() {
 
     const loadUserData = async () => {
       try {
+        let currentSessionId = '';
+        
         // Lấy phiên giao dịch hiện tại
         const sessionResponse = await fetch('/api/trading-sessions');
         if (sessionResponse.ok) {
           const sessionData = await sessionResponse.json();
           if (sessionData.success) {
+            currentSessionId = sessionData.currentSession.sessionId;
             setCurrentSessionId(sessionData.currentSession.sessionId);
             setTimeLeft(sessionData.currentSession.timeLeft);
           }
@@ -171,6 +175,13 @@ export default function TradePage() {
             }));
 
             setTradeHistory(formattedTrades);
+            
+            // Đếm số lệnh pending trong phiên hiện tại
+            const currentSessionTrades = formattedTrades.filter(trade => 
+              trade.sessionId === currentSessionId && 
+              trade.status === 'pending'
+            );
+            setTradesInCurrentSession(currentSessionTrades.length);
           }
         }
 
@@ -235,12 +246,8 @@ export default function TradePage() {
               
               // Reset các trạng thái liên quan khi session mới bắt đầu
               setTradeResult({ status: 'idle' });
-              
-              // KHÔNG reset countdown khi session thay đổi
-              // Countdown sẽ được quản lý riêng biệt
-              
-              // KHÔNG cập nhật lịch sử giao dịch ngay lập tức khi session thay đổi
-              // Lịch sử giao dịch sẽ được cập nhật sau 12 giây khi phiên kết thúc
+              setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
+
             }
             
             setSessionStatus(sessionData.currentSession.status);
@@ -410,9 +417,7 @@ export default function TradePage() {
               
               // Reset trade result
               setTradeResult({ status: 'idle' });
-              
-              // KHÔNG reset countdown khi force update session
-              // Countdown sẽ tiếp tục chạy cho đến khi hoàn thành
+
             }
           }
         } catch (error) {
@@ -456,66 +461,15 @@ export default function TradePage() {
     return () => clearInterval(timer);
   }, [updateCountdown]);
 
-  // XOÁ useEffect này vì không cần polling trade history nữa
-  // Trade history sẽ chỉ được cập nhật sau 12 giây khi phiên kết thúc
-  // useEffect(() => {
-  //   const updateTradeHistory = async () => {
-  //     try {
-  //       const tradeHistoryResponse = await fetch('/api/trades/history', {
-  //         headers: {
-  //           'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-  //         }
-  //       });
-
-  //       if (tradeHistoryResponse.ok) {
-  //         const tradeHistoryData = await tradeHistoryResponse.json();
-  //         if (tradeHistoryData.trades && tradeHistoryData.trades.length > 0) {
-  //           const formattedTrades: TradeHistoryRecord[] = tradeHistoryData.trades.map((trade: any) => ({
-  //             id: trade._id || trade._id.toString(),
-  //             sessionId: trade.sessionId,
-  //             direction: trade.direction,
-  //             amount: trade.amount,
-  //             status: trade.status || 'pending',
-  //             result: trade.result,
-  //             profit: trade.profit || 0,
-  //             createdAt: trade.createdAt || new Date().toISOString(),
-  //           }));
-
-  //           setTradeHistory(formattedTrades);
-
-  //           let hasNewCompletedTrade = false;
-  //           for (const trade of formattedTrades) {
-  //             if (
-  //               trade.status === 'completed' &&
-  //               trade.result &&
-  //               !processedTradesRef.current.has(trade.id)
-  //             ) {
-  //               processedTradesRef.current.add(trade.id);
-  //               hasNewCompletedTrade = true;
-  //               // ĐÃ XOÁ: Không hiện toast hoặc Dialog thắng/thua nữa
-  //               // Không setTradeResult, không toast win/lose
-  //             }
-  //           }
-  //           if (hasNewCompletedTrade) {
-  //             await syncBalance(setBalance, setIsSyncingBalance, true); // Chờ tất cả pending trades hoàn thành
-  //           }
-  //         }
-  //       }
-  //     } catch (error) {
-  //       console.error('Error updating trade history:', error);
-  //     }
-  //   };
-
-  //   // Chỉ cập nhật khi phiên kết thúc và sau 12 giây
-  //   // Không còn polling mỗi 3 giây nữa
-  //   // updateTradeHistory sẽ được gọi từ updateAfterDelay khi phiên kết thúc
-  // }, [currentSessionId, toast]);
-
   // Cập nhật ngày và giờ chỉ ở client
   useEffect(() => {
     const updateDateTime = () => {
-      setCurrentDate(new Date().toLocaleDateString('en-US', { year: 'numeric', month: '2-digit', day: '2-digit' }));
-      setCurrentTime(new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const now = new Date();
+      const day = String(now.getDate()).padStart(2, '0');
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const year = now.getFullYear();
+      setCurrentDate(`${day}/${month}/${year}`);
+      setCurrentTime(new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
     
     // Chỉ cập nhật khi component đã mount (tránh hydration mismatch)
@@ -696,24 +650,25 @@ export default function TradePage() {
         };
 
         setTradeHistory(prev => [newTrade, ...prev]);
-
-        // KHÔNG cập nhật balance ngay trên UI để tránh xung đột
-        // Balance sẽ được sync từ backend sau khi đặt lệnh thành công
-        console.log('💰 [TRADE] Đặt lệnh thành công, không cập nhật balance ngay trên UI');
-        
         // Nếu có quản lý frozen, có thể cập nhật thêm ở đây
 
         setAmount('');
         setSelectedAction(null);
 
+        // Cập nhật số lệnh trong phiên hiện tại
+        const tradesInSession = data.data?.tradesInSession || 1;
+        setTradesInCurrentSession(tradesInSession);
+        
+        // Hiển thị thông tin về số lệnh đã đặt trong phiên
+        const sessionInfo = tradesInSession > 1 ? ` (Lệnh thứ ${tradesInSession} trong phiên)` : '';
+        
         toast({
           title: '✅ Đặt lệnh thành công!',
-          description: `Lệnh ${selectedAction === 'UP' ? 'LÊN' : 'XUỐNG'} - ${formatCurrency(Number(amount))} - Đang đợi kết quả`,
+          description: `Lệnh ${selectedAction === 'UP' ? 'LÊN' : 'XUỐNG'} - ${formatCurrency(Number(amount))} - Đang đợi kết quả${sessionInfo}`,
           duration: 2500, // Tự động đóng sau 2.5 giây
         });
 
         // Sync balance ngay sau khi đặt lệnh để cập nhật UI chính xác
-        console.log('🔄 [TRADE] Bắt đầu sync balance sau khi đặt lệnh');
         setTimeout(async () => {
           try {
             await syncBalance(setBalance, setIsSyncingBalance, false, setLastBalanceSync);
@@ -809,6 +764,11 @@ export default function TradePage() {
                     <CardTitle className="text-gray-900 text-base font-medium">Đặt lệnh</CardTitle>
                     <span className="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded ml-auto" suppressHydrationWarning>
                       Phiên: {currentSessionId || 'N/A'}
+                      {tradesInCurrentSession > 0 && (
+                        <span className="ml-1 bg-yellow-500 text-black text-xs px-1 py-0.5 rounded">
+                          {tradesInCurrentSession} lệnh
+                        </span>
+                      )}
                     </span>
                   </div>
                 </CardHeader>
@@ -1030,6 +990,11 @@ export default function TradePage() {
                   <CardTitle className="text-gray-900 text-base font-medium">Đặt lệnh</CardTitle>
                   <span className="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded ml-auto" suppressHydrationWarning>
                     Phiên: {currentSessionId || 'N/A'}
+                    {tradesInCurrentSession > 0 && (
+                      <span className="ml-1 bg-yellow-500 text-black text-xs px-1 py-0.5 rounded">
+                        {tradesInCurrentSession} lệnh
+                      </span>
+                    )}
                   </span>
                 </div>
               </CardHeader>

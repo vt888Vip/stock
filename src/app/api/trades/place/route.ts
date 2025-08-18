@@ -43,19 +43,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Database connection failed' }, { status: 500 });
     }
 
-    // ✅ GIẢI PHÁP ĐƠN GIẢN: Kiểm tra trùng lặp trade trước
-    const existingTrade = await db.collection('trades').findOne({
-      sessionId,
-      userId: new ObjectId(user.userId),
-      status: 'pending'
-    });
-
-    if (existingTrade) {
-      return NextResponse.json({ 
-        success: false,
-        message: 'Bạn đã có lệnh đang chờ kết quả cho phiên này' 
-      }, { status: 400 });
-    }
+    // 🚀 MỚI: Cho phép đặt nhiều lệnh cùng 1 phiên - Đã xóa logic kiểm tra trùng lặp
 
     // 1. Kiểm tra và lấy thông tin user
     const userData = await db.collection('users').findOne(
@@ -113,6 +101,22 @@ export async function POST(req: Request) {
       throw new Error('Trading session has ended');
     }
 
+    // 🚀 MỚI: Kiểm tra số lệnh đã đặt trong phiên này (tùy chọn - có thể comment nếu muốn không giới hạn)
+    const userTradesInSession = await db.collection('trades').countDocuments({
+      sessionId,
+      userId: new ObjectId(user.userId),
+      status: 'pending'
+    });
+
+    // Tùy chọn: Giới hạn số lệnh per session (ví dụ: tối đa 5 lệnh)
+    const MAX_TRADES_PER_SESSION = 10; // Có thể thay đổi hoặc comment dòng này để không giới hạn
+    if (userTradesInSession >= MAX_TRADES_PER_SESSION) {
+      return NextResponse.json({ 
+        success: false,
+        message: `Bạn đã đặt tối đa ${MAX_TRADES_PER_SESSION} lệnh cho phiên này. Vui lòng đợi kết quả hoặc đặt lệnh ở phiên tiếp theo.` 
+      }, { status: 400 });
+    }
+
     // ✅ GIẢI PHÁP ĐƠN GIẢN: Sử dụng $inc để tránh race condition
     const updateUserResult = await db.collection('users').updateOne(
       { 
@@ -144,7 +148,7 @@ export async function POST(req: Request) {
       updatedAt: new Date()
     };
 
-    console.log('API /trades/place - Insert trade:', trade);
+    console.log(`🚀 [PLACE TRADE] User ${userData.username} đặt lệnh ${direction} - ${amount} VND cho session ${sessionId} (Lệnh thứ ${userTradesInSession + 1} trong phiên)`);
     const tradeResult = await db.collection('trades').insertOne(trade);
     console.log('API /trades/place - Insert result:', tradeResult);
 
@@ -171,7 +175,8 @@ export async function POST(req: Request) {
         sessionId,
         direction,
         amount,
-        asset
+        asset,
+        tradesInSession: userTradesInSession + 1 // Thêm thông tin số lệnh trong phiên
       }
     });
 
