@@ -18,8 +18,6 @@ export async function GET(request: NextRequest) {
       timestamp: now.toISOString()
     };
 
-    console.log('🕐 Cron job bắt đầu xử lý phiên:', now.toISOString());
-
     // 1. Xử lý các phiên ACTIVE đã kết thúc - Đối chiếu sessionId và lấy kết quả có sẵn
     // Chỉ xử lý phiên chưa được admin xử lý (createdBy !== 'admin')
     const expiredActiveSessions = await db.collection('trading_sessions').find({
@@ -27,8 +25,6 @@ export async function GET(request: NextRequest) {
       endTime: { $lte: now },
       createdBy: { $ne: 'admin' } // Chỉ xử lý phiên không phải admin đặt
     }).toArray();
-
-    console.log(`🔍 Tìm thấy ${expiredActiveSessions.length} phiên ACTIVE đã kết thúc (chưa được admin xử lý)`);
 
     for (const session of expiredActiveSessions) {
       try {
@@ -40,15 +36,11 @@ export async function GET(request: NextRequest) {
           continue;
         }
 
-        console.log(`🎯 Cron: Đối chiếu sessionId ${session.sessionId} - Kết quả: ${sessionResult}`);
-
         // Tìm tất cả lệnh pending của phiên này
         const pendingTrades = await db.collection('trades').find({
           sessionId: session.sessionId,
           status: 'pending'
         }).toArray();
-
-        console.log(`🔍 Cron: Tìm thấy ${pendingTrades.length} lệnh pending cho phiên ${session.sessionId}`);
 
         // Thống kê kết quả
         let totalWins = 0;
@@ -58,12 +50,10 @@ export async function GET(request: NextRequest) {
 
         // Tính toán kết quả cho từng lệnh dựa trên result có sẵn
         for (const trade of pendingTrades) {
-          console.log(`🔍 Cron: Debug - Trade ${trade._id}: direction=${trade.direction}, sessionResult=${sessionResult}, userId=${trade.userId}`);
           
           const isWin = trade.direction === sessionResult;
           const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 10 ăn 9
 
-          console.log(`🎯 Cron: So sánh - trade.direction (${trade.direction}) === sessionResult (${sessionResult}) = ${isWin}`);
 
           const updateData = {
             status: 'completed',
@@ -78,7 +68,6 @@ export async function GET(request: NextRequest) {
             { $set: updateData }
           );
 
-          console.log(`✅ Cron: Cập nhật lệnh ${trade._id}: ${isWin ? 'THẮNG' : 'THUA'} - Lợi nhuận: ${profit}`);
 
           // Cập nhật số dư người dùng
           const user = await db.collection('users').findOne({ _id: trade.userId });
@@ -109,7 +98,6 @@ export async function GET(request: NextRequest) {
               }
             );
 
-            console.log(`💰 Cron: Cập nhật số dư user ${trade.userId}: ${currentBalance} -> ${newBalance} (${isWin ? 'THẮNG' : 'THUA'})`);
           }
         }
 
@@ -147,7 +135,6 @@ export async function GET(request: NextRequest) {
         
         results.totalProcessed++;
         
-        console.log(`📈 Cron: Hoàn thành phiên ${session.sessionId}: ${totalWins} thắng, ${totalLosses} thua, Tổng thắng: ${totalWinAmount}, Tổng thua: ${totalLossAmount}`);
         
       } catch (error) {
         const errorMsg = `Lỗi khi xử lý phiên ACTIVE ${session.sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
@@ -157,9 +144,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Chức năng duy trì 30 phiên tương lai đã được tắt
-    console.log('🚫 Chức năng duy trì 30 phiên tương lai đã được tắt');
 
-    console.log(`✅ Cron job hoàn thành: Xử lý ${results.totalProcessed} phiên, ${results.errors.length} lỗi`);
 
     return NextResponse.json({
       success: true,

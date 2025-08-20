@@ -77,7 +77,6 @@ export async function GET(request: NextRequest) {
       }));
 
       allTransactions.push(...depositTransactions);
-      console.log('✅ [DEBUG] Đã thêm', depositTransactions.length, 'deposit transactions');
     }
 
     // Lấy lịch sử rút tiền
@@ -114,7 +113,6 @@ export async function GET(request: NextRequest) {
 
     // Lấy lịch sử giao dịch
     if (!type || type === 'all' || type === 'trades') {
-      console.log('📈 [DEBUG] Đang lấy trades...');
       const trades = await db.collection('trades')
         .find({ userId: userId })
         .sort({ createdAt: -1 })

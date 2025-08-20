@@ -50,18 +50,6 @@ export async function POST(request: Request) {
       token: token
     });
     
-    // Không thiết lập cookie nữa, client sẽ lưu token vào localStorage
-    /*
-    response.cookies.set('token', token, {
-      httpOnly: process.env.NODE_ENV === 'production',
-      secure: process.env.NODE_ENV === 'production',
-      maxAge: TOKEN_MAX_AGE_SEC,
-      path: '/',
-      sameSite: 'lax',
-    });
-    */
-    
-    console.debug('Login successful, token generated', { username, token: token.substring(0, 10) + '...' });
     return response;
   } catch (error) {
     console.error('Login error:', error);

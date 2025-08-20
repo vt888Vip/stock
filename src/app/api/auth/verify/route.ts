@@ -9,7 +9,6 @@ export const GET = async (request: NextRequest) => {
     let token: string | null = null;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.substring(7);
-      console.log('Token received from Authorization header', { token: token?.substring(0, 10) + '...' });
     } else {
       console.log('No Authorization header or invalid format');
     }
@@ -23,7 +22,6 @@ export const GET = async (request: NextRequest) => {
     }
 
     if (!token) {
-      console.log('No token provided in Authorization header or cookie');
       return NextResponse.json({ isValid: false, error: 'No token provided' }, { status: 401 });
     }
 

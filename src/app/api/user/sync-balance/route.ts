@@ -60,7 +60,6 @@ export async function GET(request: NextRequest) {
         }
       );
       
-      console.log(`🔄 [SYNC BALANCE MIGRATION] User ${user.username}: Chuyển đổi balance từ number sang object`);
     }
     
     const availableBalance = userBalance.available || 0;

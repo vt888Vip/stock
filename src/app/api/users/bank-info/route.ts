@@ -137,7 +137,6 @@ export async function POST(request: Request) {
 
     // Lấy dữ liệu từ request body
     const data = await request.json();
-    console.log('Received bank info data:', data);
     
     const { name, accountHolder, accountNumber } = data;
     

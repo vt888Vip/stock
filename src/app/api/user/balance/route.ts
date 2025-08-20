@@ -60,14 +60,12 @@ export async function GET(request: NextRequest) {
         }
       );
       
-      console.log(`🔄 [BALANCE MIGRATION] User ${user.username}: Chuyển đổi balance từ number (${user.balance}) sang object`);
     }
     
     const availableBalance = userBalance.available || 0;
     const frozenBalance = userBalance.frozen || 0;
     
     // Log để debug
-    console.log(`[BALANCE GET] User ${user.username}: available=${availableBalance}, frozen=${frozenBalance}`);
 
     return NextResponse.json({
       success: true,

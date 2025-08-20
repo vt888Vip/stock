@@ -66,9 +66,7 @@ export async function GET(request: NextRequest) {
     const availableBalance = typeof userBalance === 'number' ? userBalance : userBalance.available || 0;
     const frozenBalance = typeof userBalance === 'number' ? 0 : userBalance.frozen || 0;
     
-    // Log để debug
-    console.log(`[BALANCE SYNC] User ${user.username}: available=${availableBalance}, frozen=${frozenBalance}`);
-
+  
     return NextResponse.json({
       success: true,
       balance: {

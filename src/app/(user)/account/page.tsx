@@ -11,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Wallet, ArrowUpRight, ArrowDownRight, User, Calendar, Shield, CheckCircle, XCircle, Clock, Building2, CreditCard, Lock, Settings, Upload, Camera } from 'lucide-react';
 import { useToast } from '@/components/ui/use-toast';
+import { validateBankInfo, validateAccountHolder, validateBankName, validateAccountNumber, normalizeAccountHolder, normalizeBankName } from '@/lib/utils';
 
 interface User {
   _id?: string;
@@ -65,6 +66,14 @@ export default function AccountPage() {
     accountNumber: ''
   });
   const [isSavingBank, setIsSavingBank] = useState(false);
+  
+  // Bank validation states
+  const [bankErrors, setBankErrors] = useState({
+    accountHolder: '',
+    bankName: '',
+    accountNumber: ''
+  });
+  const [showBankErrors, setShowBankErrors] = useState(false);
 
   // Password form states
   const [passwordForm, setPasswordForm] = useState({
@@ -154,6 +163,127 @@ export default function AccountPage() {
 
   const handleWithdraw = () => {
     router.push('/withdraw');
+  };
+
+  // Handle bank form submission
+  const handleSubmitBank = async () => {
+    // Validate all fields
+    const accountHolderValidation = validateAccountHolder(bankForm.accountHolder);
+    const bankNameValidation = validateBankName(bankForm.bankName);
+    const accountNumberValidation = validateAccountNumber(bankForm.accountNumber);
+    
+    // Update error states
+    setBankErrors({
+      accountHolder: accountHolderValidation.errors[0] || '',
+      bankName: bankNameValidation.errors[0] || '',
+      accountNumber: accountNumberValidation.errors[0] || ''
+    });
+    
+    // Check if any validation failed
+    if (!accountHolderValidation.isValid || !bankNameValidation.isValid || !accountNumberValidation.isValid) {
+      setShowBankErrors(true);
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi validation',
+        description: 'Vui lòng kiểm tra lại thông tin ngân hàng',
+      });
+      return;
+    }
+
+    setIsSavingBank(true);
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
+
+    try {
+      const response = await fetch('/api/users/bank-info', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          accountHolder: bankForm.accountHolder.trim(),
+          name: bankForm.bankName.trim(),
+          accountNumber: bankForm.accountNumber.trim()
+        }),
+      });
+
+      const result = await response.json();
+
+      if (response.ok) {
+        toast({
+          title: 'Thành công',
+          description: 'Đã lưu thông tin ngân hàng',
+        });
+        
+        // Reset form and errors
+        setBankForm({
+          accountHolder: '',
+          bankName: '',
+          accountNumber: ''
+        });
+        setBankErrors({
+          accountHolder: '',
+          bankName: '',
+          accountNumber: ''
+        });
+        setShowBankErrors(false);
+        
+        // Refresh user data
+        await refreshUser();
+      } else {
+        toast({
+          variant: 'destructive',
+          title: 'Lỗi',
+          description: result.message || 'Không thể lưu thông tin ngân hàng',
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: 'Lỗi',
+        description: 'Không thể lưu thông tin ngân hàng',
+      });
+    } finally {
+      setIsSavingBank(false);
+    }
+  };
+
+  // Real-time validation functions
+  const handleAccountHolderChange = (value: string) => {
+    // Chỉ cập nhật giá trị, không tự động chuẩn hóa
+    setBankForm({...bankForm, accountHolder: value});
+    
+    if (showBankErrors) {
+      const validation = validateAccountHolder(value);
+      setBankErrors(prev => ({
+        ...prev,
+        accountHolder: validation.errors[0] || ''
+      }));
+    }
+  };
+
+  const handleBankNameChange = (value: string) => {
+    // Chỉ cập nhật giá trị, không tự động chuẩn hóa
+    setBankForm({...bankForm, bankName: value});
+    
+    if (showBankErrors) {
+      const validation = validateBankName(value);
+      setBankErrors(prev => ({
+        ...prev,
+        bankName: validation.errors[0] || ''
+      }));
+    }
+  };
+
+  const handleAccountNumberChange = (value: string) => {
+    setBankForm({...bankForm, accountNumber: value});
+    if (showBankErrors) {
+      const validation = validateAccountNumber(value);
+      setBankErrors(prev => ({
+        ...prev,
+        accountNumber: validation.errors[0] || ''
+      }));
+    }
   };
 
   // Handle file selection
@@ -295,86 +425,7 @@ export default function AccountPage() {
     }
   };
 
-  // Handle bank form submission
-  const handleSubmitBank = async () => {
-    if (!bankForm.accountHolder.trim()) {
-      toast({
-        variant: 'destructive',
-        title: 'Lỗi',
-        description: 'Vui lòng nhập tên chủ tài khoản',
-      });
-      return;
-    }
 
-    if (!bankForm.bankName.trim()) {
-      toast({
-        variant: 'destructive',
-        title: 'Lỗi',
-        description: 'Vui lòng nhập tên ngân hàng',
-      });
-      return;
-    }
-
-    if (!bankForm.accountNumber.trim()) {
-      toast({
-        variant: 'destructive',
-        title: 'Lỗi',
-        description: 'Vui lòng nhập số tài khoản',
-      });
-      return;
-    }
-
-    setIsSavingBank(true);
-    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
-
-    try {
-      const response = await fetch('/api/users/bank-info', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          accountHolder: bankForm.accountHolder.trim(),
-          name: bankForm.bankName.trim(),
-          accountNumber: bankForm.accountNumber.trim()
-        }),
-      });
-
-      const result = await response.json();
-
-      if (response.ok) {
-      toast({
-        title: 'Thành công',
-          description: 'Đã lưu thông tin ngân hàng',
-        });
-        
-        // Reset form
-        setBankForm({
-          accountHolder: '',
-          bankName: '',
-          accountNumber: ''
-        });
-        
-        // Refresh user data
-      await refreshUser();
-      } else {
-      toast({
-          variant: 'destructive',
-        title: 'Lỗi',
-          description: result.message || 'Không thể lưu thông tin ngân hàng',
-        });
-      }
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: 'Lỗi',
-        description: 'Không thể lưu thông tin ngân hàng',
-      });
-    } finally {
-      setIsSavingBank(false);
-    }
-  };
 
   // Handle password change
   const handleChangePassword = async () => {
@@ -885,16 +936,21 @@ export default function AccountPage() {
                       </div>
 
                       <div className="space-y-4">
-                        {/* Tên chủ tài khoản */}
-                <div>
+                                                {/* Tên chủ tài khoản */}
+                        <div>
                           <Label className="text-slate-700 text-sm font-medium">Tên chủ tài khoản *</Label>
                           <Input
                             type="text"
                             value={bankForm.accountHolder}
-                            onChange={(e) => setBankForm({...bankForm, accountHolder: e.target.value})}
-                            placeholder="Nhập tên chủ tài khoản như trên thẻ"
-                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                            onChange={(e) => handleAccountHolderChange(e.target.value)}
+                                                         placeholder="Nhập tên chủ tài khoản không dấu"
+                            className={`mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 ${
+                              showBankErrors && bankErrors.accountHolder ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                            }`}
                           />
+                          {showBankErrors && bankErrors.accountHolder && (
+                            <p className="text-red-500 text-xs mt-1">{bankErrors.accountHolder}</p>
+                          )}
                 </div>
 
                         {/* Tên ngân hàng */}
@@ -903,10 +959,15 @@ export default function AccountPage() {
                           <Input
                             type="text"
                             value={bankForm.bankName}
-                            onChange={(e) => setBankForm({...bankForm, bankName: e.target.value})}
+                            onChange={(e) => handleBankNameChange(e.target.value)}
                             placeholder="VD: Vietcombank, BIDV, Agribank..."
-                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                            className={`mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 ${
+                              showBankErrors && bankErrors.bankName ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                            }`}
                           />
+                          {showBankErrors && bankErrors.bankName && (
+                            <p className="text-red-500 text-xs mt-1">{bankErrors.bankName}</p>
+                          )}
                   </div>
 
                         {/* Số tài khoản */}
@@ -915,10 +976,15 @@ export default function AccountPage() {
                           <Input
                             type="text"
                             value={bankForm.accountNumber}
-                            onChange={(e) => setBankForm({...bankForm, accountNumber: e.target.value})}
+                            onChange={(e) => handleAccountNumberChange(e.target.value)}
                             placeholder="Nhập số tài khoản ngân hàng"
-                            className="mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500"
+                            className={`mt-1 border-slate-300 focus:border-blue-500 focus:ring-blue-500 ${
+                              showBankErrors && bankErrors.accountNumber ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : ''
+                            }`}
                           />
+                          {showBankErrors && bankErrors.accountNumber && (
+                            <p className="text-red-500 text-xs mt-1">{bankErrors.accountNumber}</p>
+                          )}
                   </div>
 
                         {/* Loại */}
