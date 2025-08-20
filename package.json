@@ -16,7 +16,8 @@
     "remove-vercel": "node scripts/remove-vercel-files.js",
     "cron": "node scripts/setup-cron.js",
     "test-cron": "node scripts/test-cron.cjs",
-    "test-performance": "node scripts/test-performance.js"
+    "test-performance": "node scripts/test-performance.js",
+    "test-balance": "node scripts/test-balance.js"
   },
   "dependencies": {
     "@emotion/is-prop-valid": "latest",

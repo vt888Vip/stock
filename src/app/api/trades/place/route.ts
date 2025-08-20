@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { ObjectId } from 'mongodb';
+import { placeTrade } from '@/lib/balanceUtils';
 
 export async function POST(req: Request) {
   try {
@@ -117,24 +118,8 @@ export async function POST(req: Request) {
       }, { status: 400 });
     }
 
-    // ✅ GIẢI PHÁP ĐƠN GIẢN: Sử dụng $inc để tránh race condition
-    const updateUserResult = await db.collection('users').updateOne(
-      { 
-        _id: new ObjectId(user.userId),
-        'balance.available': { $gte: amount } // ✅ Kiểm tra balance vẫn đủ
-      },
-      {
-        $inc: {
-          'balance.available': -amount,
-          'balance.frozen': amount
-        },
-        $set: { updatedAt: new Date() }
-      }
-    );
-
-    if (updateUserResult.modifiedCount === 0) {
-      throw new Error('Insufficient balance or user not found');
-    }
+    // ✅ SỬ DỤNG UTILITY AN TOÀN: Tránh race condition hoàn toàn
+    await placeTrade(db, user.userId, amount);
 
     // 3. Tạo lệnh giao dịch
     const trade = {

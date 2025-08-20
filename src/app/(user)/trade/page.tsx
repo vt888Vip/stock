@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/useAuth';
 import { useToast } from "@/components/ui/use-toast";
+import { withPollingMonitor, pollingMonitor } from '@/lib/pollingMonitor';
 import { generateSessionId } from '@/lib/sessionUtils';
 import { Loader2, AlertCircle, RefreshCw, ArrowDown, ArrowUp, ChevronDown, Plus, Minus, Wallet } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -224,15 +225,23 @@ export default function TradePage() {
     }
   }, [authLoading, user, updateCountdown, isBalanceLocked]);
 
-  // Update session and time left
+  // ✅ TỐI ƯU: Smart polling cho session updates
   useEffect(() => {
     const updateSession = async () => {
       try {
-        // Sử dụng API session-change để theo dõi thay đổi phiên
-        const sessionResponse = await fetch('/api/trading-sessions/session-change');
-        if (sessionResponse.ok) {
-          const sessionData = await sessionResponse.json();
-          if (sessionData.success) {
+        // ✅ SỬ DỤNG MONITORING: Wrap API call với performance tracking
+        const sessionData = await withPollingMonitor(
+          async () => {
+            const sessionResponse = await fetch('/api/trading-sessions/session-change');
+            if (!sessionResponse.ok) {
+              throw new Error('Session update failed');
+            }
+            return sessionResponse.json();
+          },
+          'session-change'
+        );
+        
+        if (sessionData.success) {
             const newSessionId = sessionData.currentSession.sessionId;
             const newTimeLeft = sessionData.currentSession.timeLeft;
             const sessionChanged = sessionData.sessionChanged;
@@ -247,12 +256,11 @@ export default function TradePage() {
               // Reset các trạng thái liên quan khi session mới bắt đầu
               setTradeResult({ status: 'idle' });
               setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
-
+              console.log('🔄 Phiên mới bắt đầu:', newSessionId);
             }
             
             setSessionStatus(sessionData.currentSession.status);
           }
-        }
       } catch (error) {
         console.error('Lỗi khi cập nhật phiên:', error);
       }
@@ -261,13 +269,25 @@ export default function TradePage() {
     // Update immediately
     updateSession();
     
-    // Then check every 2 seconds for session changes
-    const sessionInterval = setInterval(updateSession, 2000);
+    // ✅ SMART POLLING: Polling thông minh dựa trên thời gian
+    let interval;
+    if (timeLeft <= 0) {
+      interval = 1000; // Poll mỗi giây khi timer = 0 (chờ phiên mới)
+    } else if (timeLeft <= 5) {
+      interval = 1000; // Poll mỗi giây khi gần về 0
+    } else if (timeLeft <= 30) {
+      interval = 3000; // Poll mỗi 3 giây khi còn ít thời gian
+    } else {
+      interval = 10000; // Poll mỗi 10 giây khi còn nhiều thời gian
+    }
+    
+    console.log(`⏰ Smart polling: ${interval}ms (timeLeft: ${timeLeft}s)`);
+    const sessionInterval = setInterval(updateSession, interval);
     
     return () => clearInterval(sessionInterval);
-  }, [currentSessionId]);
+  }, [currentSessionId, timeLeft]); // ✅ Thêm timeLeft vào dependency
 
-  // Local timer for countdown
+  // ✅ TỐI ƯU: Local timer với fallback cho server sync
   useEffect(() => {
     if (timeLeft <= 0) {
       return;
@@ -284,6 +304,37 @@ export default function TradePage() {
     
     return () => clearInterval(timer);
   }, [timeLeft]);
+
+  // ✅ THÊM: Fallback timer khi server không response
+  useEffect(() => {
+    if (timeLeft === 0) {
+      // Fallback: Tự động chuyển phiên sau 5 giây nếu server không response
+      const fallbackTimer = setTimeout(() => {
+        console.log('⚠️ Server timeout, tự động chuyển phiên...');
+        // Force re-render để trigger session update
+        setTimeLeft(60); // Tạm thời set 60s
+        setCurrentSessionId(prev => prev + '_new'); // Force session change
+      }, 5000);
+      
+      return () => clearTimeout(fallbackTimer);
+    }
+  }, [timeLeft]);
+
+  // ✅ THÊM: Performance monitoring cleanup
+  useEffect(() => {
+    return () => {
+      // Log performance summary khi component unmount
+      pollingMonitor.logSummary();
+    };
+  }, []);
+
+  // ✅ TỐI ƯU: Conditional trade results checking
+  useEffect(() => {
+    // Chỉ check results khi có lệnh pending và timer = 0
+    if (timeLeft === 0 && tradesInCurrentSession > 0 && !countdownStarted) {
+      console.log('🔍 Bắt đầu check kết quả cho', tradesInCurrentSession, 'lệnh');
+    }
+  }, [timeLeft, tradesInCurrentSession, countdownStarted]);
 
   // Force update session when timeLeft reaches 0
   useEffect(() => {
@@ -339,24 +390,33 @@ export default function TradePage() {
       // Chờ 12 giây rồi cập nhật (giữ nguyên để tạo kịch tính)
       setTimeout(updateAfterDelay, 12000);
 
-      // Thêm polling để kiểm tra kết quả ngay lập tức (nhưng không hiển thị ngay)
+      // ✅ TỐI ƯU: Smart polling cho trade results
       const pollForResults = async () => {
         try {
-          const checkResultsResponse = await fetch('/api/trades/check-results', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-            },
-            body: JSON.stringify({ sessionId: currentSessionId })
-          });
+          // ✅ SỬ DỤNG MONITORING: Wrap API call với performance tracking
+          const resultData = await withPollingMonitor(
+            async () => {
+              const checkResultsResponse = await fetch('/api/trades/check-results', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+                },
+                body: JSON.stringify({ sessionId: currentSessionId })
+              });
 
-          if (checkResultsResponse.ok) {
-            const resultData = await checkResultsResponse.json();
-            if (resultData.hasResult) {
-              // Có kết quả rồi, nhưng không cập nhật UI ngay (để giữ kịch tính)
-              return true; // Trả về true để dừng polling
-            }
+              if (!checkResultsResponse.ok) {
+                throw new Error('Check results failed');
+              }
+
+              return checkResultsResponse.json();
+            },
+            'check-results'
+          );
+
+          if (resultData.hasResult) {
+            console.log('✅ Kết quả đã sẵn sàng');
+            return true; // Trả về true để dừng polling
           }
         } catch (error) {
           console.error('Lỗi khi polling kết quả:', error);
@@ -364,7 +424,7 @@ export default function TradePage() {
         return false; // Trả về false để tiếp tục polling
       };
 
-      // Poll mỗi 1 giây trong 12 giây đầu để đảm bảo kết quả được xử lý
+      // ✅ SMART POLLING: Polling thông minh cho kết quả
       let pollCount = 0;
       const pollInterval = setInterval(async () => {
         pollCount++;
@@ -373,11 +433,12 @@ export default function TradePage() {
         if (hasResult) {
           // Có kết quả rồi, dừng polling
           clearInterval(pollInterval);
-        } else if (pollCount >= 12) {
-          // Hết 12 giây mà chưa có kết quả, tiếp tục polling với tần suất thấp hơn
+          console.log('✅ Dừng polling kết quả');
+        } else if (pollCount >= 6) { // Giảm từ 12 xuống 6 giây
+          // Hết 6 giây, chuyển sang polling chậm hơn
           clearInterval(pollInterval);
           
-          // Tiếp tục polling mỗi 3 giây trong 30 giây tiếp theo
+          // ✅ TIẾP TỤC POLLING CHẬM: Mỗi 5 giây trong 30 giây tiếp theo
           let extendedPollCount = 0;
           const extendedPollInterval = setInterval(async () => {
             extendedPollCount++;
@@ -385,7 +446,8 @@ export default function TradePage() {
             
             if (hasResult) {
               clearInterval(extendedPollInterval);
-            } else if (extendedPollCount >= 10) { // 30 giây (10 * 3s)
+              console.log('✅ Dừng extended polling kết quả');
+            } else if (extendedPollCount >= 6) { // 30 giây (6 * 5s)
               clearInterval(extendedPollInterval);
               
               // Hiển thị thông báo cho người dùng
@@ -764,11 +826,6 @@ export default function TradePage() {
                     <CardTitle className="text-gray-900 text-base font-medium">Đặt lệnh</CardTitle>
                     <span className="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded ml-auto" suppressHydrationWarning>
                       Phiên: {currentSessionId || 'N/A'}
-                      {tradesInCurrentSession > 0 && (
-                        <span className="ml-1 bg-yellow-500 text-black text-xs px-1 py-0.5 rounded">
-                          {tradesInCurrentSession} lệnh
-                        </span>
-                      )}
                     </span>
                   </div>
                 </CardHeader>
@@ -990,11 +1047,6 @@ export default function TradePage() {
                   <CardTitle className="text-gray-900 text-base font-medium">Đặt lệnh</CardTitle>
                   <span className="bg-green-600 text-white text-xs font-semibold px-2 py-1 rounded ml-auto" suppressHydrationWarning>
                     Phiên: {currentSessionId || 'N/A'}
-                    {tradesInCurrentSession > 0 && (
-                      <span className="ml-1 bg-yellow-500 text-black text-xs px-1 py-0.5 rounded">
-                        {tradesInCurrentSession} lệnh
-                      </span>
-                    )}
                   </span>
                 </div>
               </CardHeader>

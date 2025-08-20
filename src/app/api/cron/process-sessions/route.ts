@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { NextRequest } from 'next/server';
+import { processWinTrade, processLoseTrade, calculateProfit } from '@/lib/balanceUtils';
 
 // API Cron để tự động xử lý phiên giao dịch
 export async function GET(request: NextRequest) {
@@ -48,13 +49,13 @@ export async function GET(request: NextRequest) {
         let totalWinAmount = 0;
         let totalLossAmount = 0;
 
-        // Tính toán kết quả cho từng lệnh dựa trên result có sẵn
+        // ✅ SỬ DỤNG UTILITY AN TOÀN: Xử lý từng lệnh một cách chính xác
         for (const trade of pendingTrades) {
           
           const isWin = trade.direction === sessionResult;
-          const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 10 ăn 9
+          const profit = isWin ? calculateProfit(trade.amount, 0.9) : 0; // 10 ăn 9
 
-
+          // Cập nhật trạng thái lệnh
           const updateData = {
             status: 'completed',
             result: isWin ? 'win' : 'lose',
@@ -68,36 +69,20 @@ export async function GET(request: NextRequest) {
             { $set: updateData }
           );
 
-
-          // Cập nhật số dư người dùng
-          const user = await db.collection('users').findOne({ _id: trade.userId });
-          if (user) {
-            let currentBalance = user.balance || 0;
-            let newBalance = currentBalance;
-            
+          // ✅ XỬ LÝ BALANCE AN TOÀN: Sử dụng aggregation pipeline
+          try {
             if (isWin) {
-              // Thắng: cộng tiền thắng (tiền cược + lợi nhuận)
-              // Vì tiền cược đã bị trừ khi đặt lệnh, nên cần cộng lại + lợi nhuận
-              newBalance += trade.amount + profit;
+              await processWinTrade(db, trade.userId.toString(), trade.amount, profit);
               totalWins++;
               totalWinAmount += trade.amount + profit;
             } else {
-              // Thua: trừ tiền cược (vì tiền đã bị trừ khi đặt lệnh, không cần làm gì thêm)
-              newBalance = currentBalance;
+              await processLoseTrade(db, trade.userId.toString(), trade.amount);
               totalLosses++;
               totalLossAmount += trade.amount;
             }
-
-            await db.collection('users').updateOne(
-              { _id: trade.userId },
-              { 
-                $set: { 
-                  balance: newBalance,
-                  updatedAt: now
-                }
-              }
-            );
-
+          } catch (error) {
+            console.error(`❌ [CRON] Lỗi xử lý balance cho trade ${trade._id}:`, error);
+            results.errors.push(`Lỗi xử lý balance trade ${trade._id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
           }
         }
 

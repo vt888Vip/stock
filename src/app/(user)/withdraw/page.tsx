@@ -21,27 +21,39 @@ export default function WithdrawPage() {
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Lấy thông tin balance
+  // ✅ TỐI ƯU: Lấy thông tin balance với polling 10 giây
   const { data: balanceData, error: balanceError, mutate: refreshBalance } = useSWR(
     token ? '/api/user/balance' : null,
-    url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json())
+    url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
+    {
+      refreshInterval: 10000, // Polling mỗi 10 giây
+      revalidateOnFocus: true, // Revalidate khi focus
+      revalidateOnReconnect: true, // Revalidate khi reconnect
+      dedupingInterval: 5000, // Dedupe requests trong 5 giây
+    }
   );
 
-  // ✅ THÊM: Tự động refresh dữ liệu khi trang được truy cập
+  // ✅ TỐI ƯU: Chỉ refresh một lần khi component mount
   useEffect(() => {
     if (user && token) {
-      // ✅ THỰC SỰ REFRESH DỮ LIỆU khi truy cập trang
-      refreshUser();
+      // Chỉ refresh một lần khi component mount
       refreshBalance();
     }
-  }, [user, token, refreshUser, refreshBalance]);
+  }, [user, token, refreshBalance]);
 
-  // ✅ THÊM: Refresh dữ liệu khi user quay lại trang (focus)
+  // ✅ TỐI ƯU: Refresh khi user quay lại trang (focus) - chỉ một lần
   useEffect(() => {
+    let hasRefreshed = false;
+    
     const handleFocus = () => {
-      if (user && token) {
-        refreshUser();
+      if (user && token && !hasRefreshed) {
+        hasRefreshed = true;
         refreshBalance();
+        
+        // Reset flag sau 5 giây
+        setTimeout(() => {
+          hasRefreshed = false;
+        }, 5000);
       }
     };
 
@@ -50,7 +62,7 @@ export default function WithdrawPage() {
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [user, token, refreshUser, refreshBalance]);
+  }, [user, token, refreshBalance]);
 
 
   const availableBalance = balanceData?.balance?.available || 0;

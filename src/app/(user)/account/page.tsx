@@ -250,11 +250,12 @@ export default function AccountPage() {
 
   // Real-time validation functions
   const handleAccountHolderChange = (value: string) => {
-    // Chỉ cập nhật giá trị, không tự động chuẩn hóa
-    setBankForm({...bankForm, accountHolder: value});
+    // ✅ Tự động chuyển thành chữ hoa
+    const upperCaseValue = value.toUpperCase();
+    setBankForm({...bankForm, accountHolder: upperCaseValue});
     
     if (showBankErrors) {
-      const validation = validateAccountHolder(value);
+      const validation = validateAccountHolder(upperCaseValue);
       setBankErrors(prev => ({
         ...prev,
         accountHolder: validation.errors[0] || ''

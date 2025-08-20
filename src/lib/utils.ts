@@ -126,33 +126,7 @@ export function validateAccountNumber(accountNumber: string): BankValidationResu
     errors.push('Số tài khoản chỉ được chứa số');
   }
   
-  // Kiểm tra độ dài
-  if (cleanAccountNumber.length < 8) {
-    errors.push('Số tài khoản phải có ít nhất 8 chữ số');
-  }
-  
-  if (cleanAccountNumber.length > 20) {
-    errors.push('Số tài khoản không được vượt quá 20 chữ số');
-  }
-  
-  // Kiểm tra các số tài khoản phổ biến của Việt Nam
-  const vietnameseBankPatterns = [
-    /^0\d{8,17}$/, // Vietcombank, BIDV, Agribank, etc.
-    /^1\d{8,17}$/, // Techcombank, ACB, etc.
-    /^2\d{8,17}$/, // VPBank, MB Bank, etc.
-    /^3\d{8,17}$/, // SHB, OCB, etc.
-    /^4\d{8,17}$/, // TCB, VIB, etc.
-    /^5\d{8,17}$/, // MSB, HDBank, etc.
-    /^6\d{8,17}$/, // SeABank, etc.
-    /^7\d{8,17}$/, // VPB, etc.
-    /^8\d{8,17}$/, // TPBank, etc.
-    /^9\d{8,17}$/, // Other banks
-  ];
-  
-  const isValidPattern = vietnameseBankPatterns.some(pattern => pattern.test(cleanAccountNumber));
-  if (!isValidPattern) {
-    errors.push('Số tài khoản không đúng định dạng ngân hàng Việt Nam');
-  }
+
   
   return {
     isValid: errors.length === 0,
