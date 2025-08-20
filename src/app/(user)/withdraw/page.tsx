@@ -13,6 +13,50 @@ import { Separator } from '../../../../components/ui/separator';
 import { Wallet, ArrowDownRight, Building2, AlertCircle } from 'lucide-react';
 import useSWR from 'swr';
 
+// Hàm chuẩn hóa tên chủ tài khoản: bỏ dấu, viết hoa
+const normalizeAccountHolder = (name: string): string => {
+  if (!name) return '';
+  
+  const vietnameseMap: { [key: string]: string } = {
+    'à': 'A', 'á': 'A', 'ả': 'A', 'ã': 'A', 'ạ': 'A',
+    'ă': 'A', 'ằ': 'A', 'ắ': 'A', 'ẳ': 'A', 'ẵ': 'A', 'ặ': 'A',
+    'â': 'A', 'ầ': 'A', 'ấ': 'A', 'ẩ': 'A', 'ẫ': 'A', 'ậ': 'A',
+    'è': 'E', 'é': 'E', 'ẻ': 'E', 'ẽ': 'E', 'ẹ': 'E',
+    'ê': 'E', 'ề': 'E', 'ế': 'E', 'ể': 'E', 'ễ': 'E', 'ệ': 'E',
+    'ì': 'I', 'í': 'I', 'ỉ': 'I', 'ĩ': 'I', 'ị': 'I',
+    'ò': 'O', 'ó': 'O', 'ỏ': 'O', 'õ': 'O', 'ọ': 'O',
+    'ô': 'O', 'ồ': 'O', 'ố': 'O', 'ổ': 'O', 'ỗ': 'O', 'ộ': 'O',
+    'ơ': 'O', 'ờ': 'O', 'ớ': 'O', 'ở': 'O', 'ỡ': 'O', 'ợ': 'O',
+    'ù': 'U', 'ú': 'U', 'ủ': 'U', 'ũ': 'U', 'ụ': 'U',
+    'ư': 'U', 'ừ': 'U', 'ứ': 'U', 'ử': 'U', 'ữ': 'U', 'ự': 'U',
+    'ỳ': 'Y', 'ý': 'Y', 'ỷ': 'Y', 'ỹ': 'Y', 'ỵ': 'Y',
+    'đ': 'D',
+    'À': 'A', 'Á': 'A', 'Ả': 'A', 'Ã': 'A', 'Ạ': 'A',
+    'Ă': 'A', 'Ằ': 'A', 'Ắ': 'A', 'Ẳ': 'A', 'Ẵ': 'A', 'Ặ': 'A',
+    'Â': 'A', 'Ầ': 'A', 'Ấ': 'A', 'Ẩ': 'A', 'Ẫ': 'A', 'Ậ': 'A',
+    'È': 'E', 'É': 'E', 'Ẻ': 'E', 'Ẽ': 'E', 'Ẹ': 'E',
+    'Ê': 'E', 'Ề': 'E', 'Ế': 'E', 'Ể': 'E', 'Ễ': 'E', 'Ệ': 'E',
+    'Ì': 'I', 'Í': 'I', 'Ỉ': 'I', 'Ĩ': 'I', 'Ị': 'I',
+    'Ò': 'O', 'Ó': 'O', 'Ỏ': 'O', 'Õ': 'O', 'Ọ': 'O',
+    'Ô': 'O', 'Ồ': 'O', 'Ố': 'O', 'Ổ': 'O', 'Ỗ': 'O', 'Ộ': 'O',
+    'Ơ': 'O', 'Ờ': 'O', 'Ớ': 'O', 'Ở': 'O', 'Ỡ': 'O', 'Ợ': 'O',
+    'Ù': 'U', 'Ú': 'U', 'Ủ': 'U', 'Ũ': 'U', 'Ụ': 'U',
+    'Ư': 'U', 'Ừ': 'U', 'Ứ': 'U', 'Ử': 'U', 'Ữ': 'U', 'Ự': 'U',
+    'Ỳ': 'Y', 'Ý': 'Y', 'Ỷ': 'Y', 'Ỹ': 'Y', 'Ỵ': 'Y',
+    'Đ': 'D'
+  };
+  
+  let normalized = name;
+  
+  // Thay thế các ký tự có dấu
+  for (const [accented, plain] of Object.entries(vietnameseMap)) {
+    normalized = normalized.replace(new RegExp(accented, 'g'), plain);
+  }
+  
+  // Loại bỏ khoảng trắng thừa và chuyển thành chữ hoa
+  return normalized.replace(/\s+/g, ' ').trim().toUpperCase();
+};
+
 export default function WithdrawPage() {
   const { user, isLoading, isAuthenticated, refreshUser } = useAuth();
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
@@ -30,6 +74,18 @@ export default function WithdrawPage() {
       revalidateOnFocus: true, // Revalidate khi focus
       revalidateOnReconnect: true, // Revalidate khi reconnect
       dedupingInterval: 5000, // Dedupe requests trong 5 giây
+    }
+  );
+
+  // ✅ THÊM: Polling thông tin ngân hàng mỗi 30 giây
+  const { data: userData, mutate: refreshUserData } = useSWR(
+    token ? '/api/auth/me' : null,
+    url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
+    {
+      refreshInterval: 30000, // Polling mỗi 30 giây
+      revalidateOnFocus: true,
+      revalidateOnReconnect: true,
+      dedupingInterval: 10000,
     }
   );
 
@@ -75,8 +131,9 @@ export default function WithdrawPage() {
     }
   }, [user, isLoading, isAuthenticated, router, toast]);
 
-  // Kiểm tra xem user đã liên kết ngân hàng chưa
-  const hasBankInfo = user?.bank?.name && user?.bank?.accountNumber && user?.bank?.accountHolder;
+  // ✅ CẬP NHẬT: Sử dụng dữ liệu từ polling để có thông tin mới nhất
+  const currentUser = userData?.user || user;
+  const hasBankInfo = currentUser?.bank?.name && currentUser?.bank?.accountNumber && currentUser?.bank?.accountHolder;
 
   // Tính toán số tiền thực nhận sau khi trừ phí
   const calculateActualAmount = (withdrawAmount: number) => {
@@ -114,18 +171,8 @@ export default function WithdrawPage() {
     setIsSubmitting(true);
 
     try {
-      // 🔄 Lấy thông tin ngân hàng mới nhất trực tiếp từ database
-      const userResponse = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (!userResponse.ok) {
-        throw new Error('Không thể lấy thông tin user');
-      }
-    
-      const currentUser = await userResponse.json();
-      // Lấy thông tin bank từ đúng cấu trúc
-      const bankInfo = currentUser?.user?.bank || {};
+             // ✅ SỬ DỤNG: Thông tin ngân hàng từ polling (đã có sẵn)
+       const bankInfo = currentUser?.bank || {};
     
       // Kiểm tra thông tin ngân hàng chi tiết hơn
       if (!bankInfo.name) {
@@ -169,7 +216,7 @@ export default function WithdrawPage() {
           amount: withdrawAmount,
           bankName: bankInfo.name,
           accountNumber: bankInfo.accountNumber,
-          accountHolder: bankInfo.accountHolder
+          accountHolder: normalizeAccountHolder(bankInfo.accountHolder)
         }),
       });
       
@@ -182,8 +229,9 @@ export default function WithdrawPage() {
         });
         setAmount('');
         
-        // Refresh balance data
-        refreshBalance();
+                 // Refresh balance data và user data
+         refreshBalance();
+         refreshUserData();
       } else {
         toast({ variant: 'destructive', title: 'Lỗi', description: result.message || 'Không thể gửi yêu cầu rút tiền' });
       }
@@ -332,18 +380,18 @@ export default function WithdrawPage() {
                 <CardContent className="space-y-3">
                                      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-3 sm:p-4 rounded-xl border border-blue-200">
                      <div className="space-y-2">
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Tên ngân hàng:</span>
-                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.name || 'N/A'}</span>
-                       </div>
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Số tài khoản:</span>
-                         <span className="font-mono text-xs sm:text-sm font-bold text-slate-800">{user?.bank?.accountNumber || 'N/A'}</span>
-                       </div>
-                       <div className="flex justify-between items-center">
-                         <span className="text-slate-600 text-xs sm:text-sm font-medium">Chủ tài khoản:</span>
-                         <span className="font-semibold text-xs sm:text-sm text-slate-800">{user?.bank?.accountHolder || 'N/A'}</span>
-                       </div>
+                                               <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-xs sm:text-sm font-medium">Tên ngân hàng:</span>
+                          <span className="font-semibold text-xs sm:text-sm text-slate-800">{currentUser?.bank?.name || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-xs sm:text-sm font-medium">Số tài khoản:</span>
+                          <span className="font-mono text-xs sm:text-sm font-bold text-slate-800">{currentUser?.bank?.accountNumber || 'N/A'}</span>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-slate-600 text-xs sm:text-sm font-medium">Chủ tài khoản:</span>
+                          <span className="font-semibold text-xs sm:text-sm text-slate-800">{normalizeAccountHolder(currentUser?.bank?.accountHolder || '') || 'N/A'}</span>
+                        </div>
                      </div>
                    </div>
                 </CardContent>

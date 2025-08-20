@@ -17,6 +17,35 @@ import { Loader2, Eye, EyeOff, CheckCircle } from 'lucide-react';
 // Import the React global initializer
 import '@/lib/ensure-react';
 
+// Hàm kiểm tra tên tài khoản có hợp lệ không (không dấu, không khoảng trắng)
+const validateUsername = (username: string): { isValid: boolean; message: string } => {
+  if (!username) {
+    return { isValid: false, message: 'Tên đăng nhập không được để trống' };
+  }
+  
+  if (username.length < 3) {
+    return { isValid: false, message: 'Tên đăng nhập phải có ít nhất 3 ký tự' };
+  }
+  
+  // Kiểm tra có ký tự có dấu không
+  const vietnameseRegex = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+  if (vietnameseRegex.test(username)) {
+    return { isValid: false, message: 'Tên đăng nhập không được chứa dấu' };
+  }
+  
+  // Kiểm tra có khoảng trắng không
+  if (/\s/.test(username)) {
+    return { isValid: false, message: 'Tên đăng nhập không được chứa khoảng trắng' };
+  }
+  
+  // Kiểm tra chỉ chứa chữ cái, số và dấu gạch dưới
+  if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+    return { isValid: false, message: 'Tên đăng nhập chỉ được chứa chữ cái, số và dấu gạch dưới' };
+  }
+  
+  return { isValid: true, message: '' };
+};
+
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
     username: "",
@@ -64,9 +93,11 @@ export default function RegisterPage() {
   }
 
   const validateForm = () => {
-    if (formData.username.length < 3) {
-      setError("Tên đăng nhập phải có ít nhất 3 ký tự")
-      return false
+    // Validate username
+    const usernameValidation = validateUsername(formData.username);
+    if (!usernameValidation.isValid) {
+      setError(usernameValidation.message);
+      return false;
     }
 
     if (formData.password.length < 6) {
@@ -107,7 +138,7 @@ export default function RegisterPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          username: formData.username.trim(),
+          username: formData.username.trim().toLowerCase(),
           password: formData.password,
         }),
       })
@@ -138,7 +169,7 @@ export default function RegisterPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              username: formData.username.trim(),
+              username: formData.username.trim().toLowerCase(),
               password: formData.password,
             }),
           })
@@ -220,18 +251,21 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="username">Tên đăng nhập</Label>
-              <Input
-                id="username"
-                name="username"
-                type="text"
-                value={formData.username}
-                onChange={handleChange}
-                required
-                minLength={3}
-                placeholder="Nhập tên đăng nhập (ít nhất 3 ký tự)"
-                disabled={isLoading || isAutoLogin || isRedirecting}
-                className="transition-all duration-200"
-              />
+                             <Input
+                 id="username"
+                 name="username"
+                 type="text"
+                 value={formData.username}
+                 onChange={handleChange}
+                 required
+                 minLength={3}
+                 placeholder="Nhập tên đăng nhập (không dấu, không khoảng trắng)"
+                 disabled={isLoading || isAutoLogin || isRedirecting}
+                 className="transition-all duration-200"
+               />
+               <p className="text-xs text-gray-500">
+                 Tên đăng nhập: không dấu, không khoảng trắng, chỉ chữ cái, số và dấu gạch dưới
+               </p>
             </div>
 
             <div className="space-y-2">

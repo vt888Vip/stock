@@ -22,6 +22,31 @@ export async function POST(request: Request) {
       );
     }
 
+    // Kiểm tra có ký tự có dấu không
+    const vietnameseRegex = /[àáảãạăằắẳẵặâầấẩẫậèéẻẽẹêềếểễệìíỉĩịòóỏõọôồốổỗộơờớởỡợùúủũụưừứửữựỳýỷỹỵđ]/i;
+    if (vietnameseRegex.test(username)) {
+      return NextResponse.json(
+        { success: false, message: 'Tên đăng nhập không được chứa dấu tiếng Việt' },
+        { status: 400 }
+      );
+    }
+
+    // Kiểm tra có khoảng trắng không
+    if (/\s/.test(username)) {
+      return NextResponse.json(
+        { success: false, message: 'Tên đăng nhập không được chứa khoảng trắng' },
+        { status: 400 }
+      );
+    }
+
+    // Kiểm tra chỉ chứa chữ cái, số và dấu gạch dưới
+    if (!/^[a-zA-Z0-9_]+$/.test(username)) {
+      return NextResponse.json(
+        { success: false, message: 'Tên đăng nhập chỉ được chứa chữ cái, số và dấu gạch dưới' },
+        { status: 400 }
+      );
+    }
+
     // Validate password length
     if (password.length < 6) {
       return NextResponse.json(
