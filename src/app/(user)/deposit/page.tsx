@@ -23,31 +23,36 @@ export default function DepositPage() {
   const token = typeof window !== 'undefined' ? localStorage.getItem('token') || localStorage.getItem('authToken') : null;
 
   // Lấy cài đặt chung của hệ thống
+  const fetcher = async (url: string) => {
+    const res = await fetch(url, { 
+      headers: {
+        Authorization: `Bearer ${token}`
+      }
+    });
+    if (!res.ok) throw new Error('Failed to fetch settings');
+    return res.json();
+  };
+
   const { data: settings, error: settingsError } = useSWR(
-    user ? '/api/admin/settings' : null,
-    async (url: string) => {
-      const res = await fetch(url, { 
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch settings');
-      return res.json();
+    '/api/settings',
+    fetcher,
+    {
+      refreshInterval: 120000, // Polling mỗi 2 phút
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
+      revalidateOnReconnect: true,
+      dedupingInterval: 60000, // Dedupe requests trong 1 phút
     }
   );
   
   // Lấy thông tin ngân hàng của nền tảng
   const { data: platformBanks, error: platformBanksError } = useSWR(
-    user ? '/api/platform/banks' : null,
-    async (url: string) => {
-      const res = await fetch(url, { 
-        headers: {
-          Authorization: `Bearer ${token}`
-        }
-      });
-      if (!res.ok) throw new Error('Failed to fetch platform banks');
-      const data = await res.json();
-      return data;
+    '/api/platform/banks',
+    fetcher,
+    {
+      refreshInterval: 300000, // Polling mỗi 5 phút
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
+      revalidateOnReconnect: true,
+      dedupingInterval: 120000, // Dedupe requests trong 2 phút
     }
   );
 

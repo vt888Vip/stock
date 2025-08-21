@@ -65,27 +65,27 @@ export default function WithdrawPage() {
   const [amount, setAmount] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // ✅ TỐI ƯU: Lấy thông tin balance với polling 10 giây
+  // ✅ TỐI ƯU: Lấy thông tin balance với polling 30 giây thay vì 10 giây
   const { data: balanceData, error: balanceError, mutate: refreshBalance } = useSWR(
     token ? '/api/user/balance' : null,
     url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
     {
-      refreshInterval: 10000, // Polling mỗi 10 giây
-      revalidateOnFocus: true, // Revalidate khi focus
+      refreshInterval: 30000, // Polling mỗi 30 giây thay vì 10 giây
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
       revalidateOnReconnect: true, // Revalidate khi reconnect
-      dedupingInterval: 5000, // Dedupe requests trong 5 giây
+      dedupingInterval: 10000, // Tăng dedupe lên 10 giây
     }
   );
 
-  // ✅ THÊM: Polling thông tin ngân hàng mỗi 30 giây
+  // ✅ THÊM: Polling thông tin ngân hàng mỗi 60 giây thay vì 30 giây
   const { data: userData, mutate: refreshUserData } = useSWR(
     token ? '/api/auth/me' : null,
     url => fetch(url, { headers: { Authorization: `Bearer ${token}` } }).then(res => res.json()),
     {
-      refreshInterval: 30000, // Polling mỗi 30 giây
-      revalidateOnFocus: true,
+      refreshInterval: 60000, // Polling mỗi 60 giây thay vì 30 giây
+      revalidateOnFocus: false, // Tắt revalidate khi focus
       revalidateOnReconnect: true,
-      dedupingInterval: 10000,
+      dedupingInterval: 30000, // Tăng dedupe lên 30 giây
     }
   );
 
@@ -97,28 +97,28 @@ export default function WithdrawPage() {
     }
   }, [user, token, refreshBalance]);
 
-  // ✅ TỐI ƯU: Refresh khi user quay lại trang (focus) - chỉ một lần
-  useEffect(() => {
-    let hasRefreshed = false;
+  // ✅ TỐI ƯU: Tắt refresh khi user quay lại trang để tránh nhảy tiền
+  // useEffect(() => {
+  //   let hasRefreshed = false;
     
-    const handleFocus = () => {
-      if (user && token && !hasRefreshed) {
-        hasRefreshed = true;
-        refreshBalance();
+  //   const handleFocus = () => {
+  //     if (user && token && !hasRefreshed) {
+  //       hasRefreshed = true;
+  //       refreshBalance();
         
-        // Reset flag sau 5 giây
-        setTimeout(() => {
-          hasRefreshed = false;
-        }, 5000);
-      }
-    };
+  //       // Reset flag sau 5 giây
+  //       setTimeout(() => {
+  //         hasRefreshed = false;
+  //       }, 5000);
+  //     }
+  //   };
 
-    window.addEventListener('focus', handleFocus);
+  //   window.addEventListener('focus', handleFocus);
     
-    return () => {
-      window.removeEventListener('focus', handleFocus);
-    };
-  }, [user, token, refreshBalance]);
+  //   return () => {
+  //     window.removeEventListener('focus', handleFocus);
+  //   };
+  // }, [user, token, refreshBalance]);
 
 
   const availableBalance = balanceData?.balance?.available || 0;

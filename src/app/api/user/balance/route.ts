@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { verifyToken } from '@/lib/auth';
 import { getMongoDb } from '@/lib/db';
 import { ObjectId } from 'mongodb';
+import { validateAndFixBalance } from '@/lib/balanceUtils';
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,6 +33,12 @@ export async function GET(request: NextRequest) {
 
     const db = await getMongoDb();
     const userId = new ObjectId(tokenData.userId);
+
+    // ✅ THÊM: Kiểm tra và sửa balance không nhất quán
+    const wasFixed = await validateAndFixBalance(db, tokenData.userId);
+    if (wasFixed) {
+      console.log(`🔧 [BALANCE API] Đã sửa balance cho user ${tokenData.userId}`);
+    }
 
     // Lấy thông tin user
     const user = await db.collection('users').findOne({ _id: userId });
@@ -66,6 +73,7 @@ export async function GET(request: NextRequest) {
     const frozenBalance = userBalance.frozen || 0;
     
     // Log để debug
+    console.log(`📊 [BALANCE API] User ${tokenData.userId}: available=${availableBalance}, frozen=${frozenBalance}`);
 
     return NextResponse.json({
       success: true,
@@ -78,7 +86,8 @@ export async function GET(request: NextRequest) {
         id: user._id,
         username: user.username,
         email: user.email
-      }
+      },
+      wasFixed: wasFixed // Thêm thông tin về việc có sửa balance không
     });
 
   } catch (error) {

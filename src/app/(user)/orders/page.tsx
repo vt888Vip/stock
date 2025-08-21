@@ -21,7 +21,13 @@ export default function OrdersPage() {
     isLoading: depositLoading 
   } = useSWR(
     activeTab === 'deposits' ? `/api/deposits/history?page=${currentPage}&limit=${pageSize}` : null,
-    fetcher
+    fetcher,
+    {
+      refreshInterval: 60000, // Polling mỗi 60 giây
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
+      revalidateOnReconnect: true,
+      dedupingInterval: 30000, // Dedupe requests trong 30 giây
+    }
   );
 
   // Fetch withdrawal history
@@ -31,7 +37,13 @@ export default function OrdersPage() {
     isLoading: withdrawalLoading 
   } = useSWR(
     activeTab === 'withdrawals' ? `/api/withdrawals/history?page=${currentPage}&limit=${pageSize}` : null,
-    fetcher
+    fetcher,
+    {
+      refreshInterval: 60000, // Polling mỗi 60 giây
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
+      revalidateOnReconnect: true,
+      dedupingInterval: 30000, // Dedupe requests trong 30 giây
+    }
   );
 
   // Reset pagination when changing tabs

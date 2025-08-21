@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { NextRequest } from 'next/server';
 import { ObjectId } from 'mongodb';
+import { processWinTrade, processLoseTrade, validateBalanceAfterTrade, logDetailedBalanceChange } from '@/lib/balanceUtils';
 
 // Cache để tránh xử lý trùng lặp - giảm thời gian cache
 const processingSessions = new Set<string>();
@@ -92,13 +93,12 @@ export async function POST(request: NextRequest) {
         if (trades.length > 0) {
           // 5. Tối ưu hóa bulk operations
           const bulkTradesOps: any[] = [];
-          const userUpdates = new Map<string, { available: number; frozen: number }>();
           let totalWins = 0;
           let totalLosses = 0;
           let totalWinAmount = 0;
           let totalLossAmount = 0;
 
-          // Xử lý từng lệnh một cách hiệu quả
+          // ✅ SỬA: Xử lý từng lệnh riêng biệt để tránh cộng dồn
           for (const trade of trades) {
             const isWin = trade.direction === finalResult;
             const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 90% tiền thắng (10 ăn 9)
@@ -119,25 +119,55 @@ export async function POST(request: NextRequest) {
               }
             });
 
-            // ✅ SỬA: Không tích lũy trong API, để database xử lý hoàn toàn
-            // Tích lũy user balance updates
-            const userId = trade.userId.toString();
-            if (!userUpdates.has(userId)) {
-              userUpdates.set(userId, { available: 0, frozen: 0 });
-            }
-            
-            const userUpdate = userUpdates.get(userId)!;
-            if (isWin) {
-              // ✅ SỬA: Chỉ lưu thông tin để database tính toán
-              userUpdate.available += profit; // Chỉ cộng profit (900)
-              userUpdate.frozen -= trade.amount; // Trừ amount gốc khỏi frozen
-              totalWins++;
-              totalWinAmount += trade.amount + profit;
-            } else {
-              // Khi thua, chỉ trừ amount gốc khỏi frozen
-              userUpdate.frozen -= trade.amount;
-              totalLosses++;
-              totalLossAmount += trade.amount;
+            // ✅ SỬA: Sử dụng hàm riêng biệt để xử lý balance
+            try {
+              if (isWin) {
+                // ✅ SỬA: Sử dụng hàm processWinTrade với Aggregation Pipeline
+                await processWinTrade(db, trade.userId.toString(), trade.amount, profit);
+                
+                // ✅ THÊM: Validation sau khi xử lý thắng
+                const isValid = await validateBalanceAfterTrade(db, trade.userId.toString(), trade.amount, true, profit);
+                if (!isValid) {
+                  console.error(`❌ [TRADE PROCESS] Balance không hợp lệ sau khi thắng - User: ${trade.userId}, Trade: ${trade._id}`);
+                }
+                
+                // ✅ THÊM: Log chi tiết
+                await logDetailedBalanceChange(db, trade.userId.toString(), 'WIN_TRADE', {
+                  tradeId: trade._id,
+                  sessionId: trade.sessionId,
+                  amount: trade.amount,
+                  profit: profit,
+                  direction: trade.direction,
+                  result: finalResult
+                });
+                
+                totalWins++;
+                totalWinAmount += trade.amount + profit;
+              } else {
+                // ✅ SỬA: Sử dụng hàm processLoseTrade với Aggregation Pipeline
+                await processLoseTrade(db, trade.userId.toString(), trade.amount);
+                
+                // ✅ THÊM: Validation sau khi xử lý thua
+                const isValid = await validateBalanceAfterTrade(db, trade.userId.toString(), trade.amount, false);
+                if (!isValid) {
+                  console.error(`❌ [TRADE PROCESS] Balance không hợp lệ sau khi thua - User: ${trade.userId}, Trade: ${trade._id}`);
+                }
+                
+                // ✅ THÊM: Log chi tiết
+                await logDetailedBalanceChange(db, trade.userId.toString(), 'LOSE_TRADE', {
+                  tradeId: trade._id,
+                  sessionId: trade.sessionId,
+                  amount: trade.amount,
+                  direction: trade.direction,
+                  result: finalResult
+                });
+                
+                totalLosses++;
+                totalLossAmount += trade.amount;
+              }
+            } catch (error) {
+              console.error(`❌ [TRADE PROCESS] Lỗi xử lý trade ${trade._id}:`, error);
+              throw error;
             }
           }
 
@@ -146,54 +176,6 @@ export async function POST(request: NextRequest) {
             await db.collection('trades').bulkWrite(bulkTradesOps, { session: dbSession });
             console.log(`✅ Updated ${bulkTradesOps.length} trades`);
           }
-
-          // 7. ✅ SỬA: Để database tính toán hoàn toàn - KHÔNG CÒN RACE CONDITION
-          for (const [userId, update] of Array.from(userUpdates.entries())) {
-            try {
-              // ✅ SỬA: Sử dụng MongoDB aggregation để database tính toán hoàn toàn
-              const updateResult = await db.collection('users').updateOne(
-                { _id: new ObjectId(userId) },
-                [
-                  {
-                    $set: {
-                      // Database tự động tính toán balance mới
-                      balance: {
-                        available: {
-                          $add: [
-                            { $ifNull: ['$balance.available', 0] },
-                            update.available
-                          ]
-                        },
-                        frozen: {
-                          $add: [
-                            { $ifNull: ['$balance.frozen', 0] },
-                            update.frozen
-                          ]
-                        }
-                      },
-                      updatedAt: new Date()
-                    }
-                  }
-                ],
-                { session: dbSession }
-              );
-
-              if (updateResult.modifiedCount > 0) {
-                console.log(`💰 [USER UPDATE] User ${userId}: available +${update.available}, frozen ${update.frozen > 0 ? '+' : ''}${update.frozen}`);
-              } else {
-                console.error(`❌ [USER UPDATE] Không thể cập nhật user ${userId}`);
-              }
-
-            } catch (error) {
-              console.error(`❌ [USER UPDATE] Lỗi khi cập nhật user ${userId}:`, error);
-            }
-          }
-
-          // Xóa phần bulk update cũ để tránh cộng dồn
-          // if (bulkUsersOps.length > 0) {
-          //   await db.collection('users').bulkWrite(bulkUsersOps, { session: dbSession });
-          //   console.log(`✅ Updated ${bulkUsersOps.length} users`);
-          // }
 
           // 8. Cập nhật trạng thái phiên giao dịch
           await db.collection('trading_sessions').updateOne(

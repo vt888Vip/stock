@@ -20,7 +20,13 @@ export default function WithdrawHistoryPage() {
   // Fetch withdrawal history
   const { data, error, isLoading } = useSWR<{ withdrawals: Withdrawal[], total: number }>(
     `/api/withdrawals/history?page=${currentPage}&limit=${pageSize}`,
-    fetcher
+    fetcher,
+    {
+      refreshInterval: 60000, // Polling mỗi 60 giây
+      revalidateOnFocus: false, // Tắt revalidate khi focus để tránh nhảy tiền
+      revalidateOnReconnect: true,
+      dedupingInterval: 30000, // Dedupe requests trong 30 giây
+    }
   );
 
   // Get status badge variant based on withdrawal status
