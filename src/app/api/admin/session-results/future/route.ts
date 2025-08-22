@@ -107,102 +107,30 @@ export async function POST(request: NextRequest) {
         const now = new Date();
         console.log(`👑 Admin đặt kết quả cho phiên ${sessionId}: ${result}`);
 
-        // Tìm tất cả lệnh của phiên này
-        const pendingTrades = await db.collection('trades').find({
-          sessionId: sessionId,
-          status: 'pending'
-        }).toArray();
-
-        console.log(`📋 Tìm thấy ${pendingTrades.length} lệnh cần xử lý`);
-
-        let totalWins = 0;
-        let totalLosses = 0;
-        let totalWinAmount = 0;
-        let totalLossAmount = 0;
-
-        // Xử lý từng lệnh ngay lập tức
-        for (const trade of pendingTrades) {
-          const isWin = trade.direction === result;
-          const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // Thắng được 90%
-
-          // Cập nhật lệnh
-          await db.collection('trades').updateOne(
-            { _id: trade._id },
-            { 
-              $set: { 
-                status: 'completed', 
-                result: isWin ? 'win' : 'lose', 
-                profit: profit,
-                updatedAt: now
-              }
-            }
-          );
-
-                        // Cập nhật số dư user
-              if (isWin) {
-                // ✅ SỬA LỖI: Khi thắng, cần:
-                // 1. Trả lại tiền gốc từ frozen về available
-                // 2. Cộng thêm profit vào available
-                await db.collection('users').updateOne(
-                  { _id: new ObjectId(trade.userId) },
-                  { 
-                    $inc: { 
-                      'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
-                      'balance.frozen': -trade.amount 
-                    },
-                    $set: { updatedAt: now }
-                  }
-                );
-                totalWins++;
-                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
-                console.log(`💰 User ${trade.userId} thắng: +${trade.amount + profit} VND (tiền gốc + profit)`);
-              } else {
-            // Thua: chỉ trừ tiền cược (đã bị đóng băng)
-            await db.collection('users').updateOne(
-              { _id: new ObjectId(trade.userId) },
-              { 
-                $inc: { 'balance.frozen': -trade.amount },
-                $set: { updatedAt: now }
-              }
-            );
-            totalLosses++;
-            totalLossAmount += trade.amount;
-            console.log(`💸 User ${trade.userId} thua: -${trade.amount} VND`);
-          }
-        }
-
-        // Cập nhật phiên thành COMPLETED ngay lập tức
+        // ✅ SỬA: Chỉ đặt kết quả, KHÔNG xử lý balance
+        // Cron job sẽ xử lý balance sau khi phiên kết thúc
         await db.collection('trading_sessions').updateOne(
           { sessionId },
           {
             $set: {
               result: result,
-              status: 'COMPLETED', // Đặt trực tiếp thành COMPLETED
               actualResult: result,
-              createdBy: 'admin',
-              totalTrades: pendingTrades.length,
-              totalWins: totalWins,
-              totalLosses: totalLosses,
-              totalWinAmount: totalWinAmount,
-              totalLossAmount: totalLossAmount,
-              completedAt: now,
+              createdBy: 'admin', // ⚡ QUAN TRỌNG: Đánh dấu admin đặt
               updatedAt: now
             }
           }
         );
 
-        console.log(`✅ Hoàn thành xử lý kết quả admin cho phiên ${sessionId}: ${totalWins} thắng, ${totalLosses} thua`);
+        console.log(`✅ Admin đã đặt kết quả cho phiên ${sessionId}: ${result} (Cron sẽ xử lý balance sau)`);
 
         return NextResponse.json({
           success: true,
-          message: `Phiên ${sessionId} kết quả được đặt: ${result} (${totalWins} thắng, ${totalLosses} thua)`,
+          message: `Phiên ${sessionId} kết quả được đặt: ${result} (Cron sẽ xử lý balance sau)`,
           data: { 
             sessionId, 
             result, 
-            status: 'COMPLETED',
-            totalTrades: pendingTrades.length,
-            totalWins,
-            totalLosses
+            status: 'ACTIVE', // Vẫn giữ ACTIVE để cron xử lý
+            note: 'Cron job sẽ xử lý balance khi phiên kết thúc'
           }
         });
 
@@ -235,135 +163,14 @@ export async function POST(request: NextRequest) {
           if (session) {
             const now = new Date();
             
-            // Tìm và xử lý tất cả lệnh của phiên này
-            const pendingTrades = await db.collection('trades').find({
-              sessionId: sessionId,
-              status: 'pending'
-            }).toArray();
-
-            let totalWins = 0;
-            let totalLosses = 0;
-            let totalWinAmount = 0;
-            let totalLossAmount = 0;
-
-            // Xử lý từng lệnh
-            for (const trade of pendingTrades) {
-              const isWin = trade.direction === result;
-              const profit = isWin ? Math.floor(trade.amount * 0.9) : 0;
-
-              // Cập nhật lệnh
-              await db.collection('trades').updateOne(
-                { _id: trade._id },
-                { 
-                  $set: { 
-                    status: 'completed', 
-                    result: isWin ? 'win' : 'lose', 
-                    profit: profit,
-                    updatedAt: now
-                  }
-                }
-              );
-
-              // ✅ SỬA LỖI: Sử dụng $set thay vì $inc để tránh race condition
-              if (isWin) {
-                // ✅ SỬA LỖI: Khi thắng, cần:
-                // 1. Trả lại tiền gốc từ frozen về available
-                // 2. Cộng thêm profit vào available
-                
-                // Lấy balance hiện tại của user
-                const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
-                if (currentUser) {
-                  // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
-                  let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
-                  
-                  // Nếu balance là number (kiểu cũ), chuyển đổi thành object
-                  if (typeof currentBalance === 'number') {
-                    currentBalance = {
-                      available: currentBalance,
-                      frozen: 0
-                    };
-                    
-                    console.log(`🔄 [ADMIN SESSION RESULTS MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
-                  }
-
-                  // Tính toán balance mới
-                  const newAvailableBalance = currentBalance.available + trade.amount + profit;
-                  const newFrozenBalance = currentBalance.frozen - trade.amount;
-
-                  await db.collection('users').updateOne(
-                    { _id: new ObjectId(trade.userId) },
-                    { 
-                      $set: { 
-                        balance: {
-                          available: newAvailableBalance,
-                          frozen: newFrozenBalance
-                        },
-                        updatedAt: now
-                      }
-                    }
-                  );
-                  
-                  console.log(`💰 [ADMIN SESSION RESULTS] User ${currentUser.username} thắng: available ${currentBalance.available} → ${newAvailableBalance} (+${trade.amount + profit}), frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
-                }
-                
-                totalWins++;
-                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
-              } else {
-                // Lấy balance hiện tại của user
-                const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
-                if (currentUser) {
-                  // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
-                  let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
-                  
-                  // Nếu balance là number (kiểu cũ), chuyển đổi thành object
-                  if (typeof currentBalance === 'number') {
-                    currentBalance = {
-                      available: currentBalance,
-                      frozen: 0
-                    };
-                    
-                    console.log(`🔄 [ADMIN SESSION RESULTS MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
-                  }
-
-                  // Tính toán balance mới
-                  const newFrozenBalance = currentBalance.frozen - trade.amount;
-
-                  await db.collection('users').updateOne(
-                    { _id: new ObjectId(trade.userId) },
-                    { 
-                      $set: { 
-                        balance: {
-                          ...currentBalance,
-                          frozen: newFrozenBalance
-                        },
-                        updatedAt: now
-                      }
-                    }
-                  );
-                  
-                  console.log(`💸 [ADMIN SESSION RESULTS] User ${currentUser.username} thua: frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
-                }
-                
-                totalLosses++;
-                totalLossAmount += trade.amount;
-              }
-            }
-
-            // Cập nhật phiên thành COMPLETED
+            // ✅ SỬA: Chỉ đặt kết quả, KHÔNG xử lý balance
             await db.collection('trading_sessions').updateOne(
               { sessionId },
               {
                 $set: {
                   result: result,
-                  status: 'COMPLETED',
                   actualResult: result,
-                  createdBy: 'admin',
-                  totalTrades: pendingTrades.length,
-                  totalWins: totalWins,
-                  totalLosses: totalLosses,
-                  totalWinAmount: totalWinAmount,
-                  totalLossAmount: totalLossAmount,
-                  completedAt: now,
+                  createdBy: 'admin', // ⚡ QUAN TRỌNG: Đánh dấu admin đặt
                   updatedAt: now
                 }
               }
@@ -372,16 +179,15 @@ export async function POST(request: NextRequest) {
             updateResults.push({ 
               sessionId, 
               result, 
-              totalTrades: pendingTrades.length,
-              totalWins,
-              totalLosses
+              status: 'ACTIVE',
+              note: 'Cron job sẽ xử lý balance khi phiên kết thúc'
             });
           }
         }
 
         return NextResponse.json({
           success: true,
-          message: `Đã đặt kết quả cho ${updateResults.length} phiên`,
+          message: `Đã đặt kết quả cho ${updateResults.length} phiên (Cron sẽ xử lý balance sau)`,
           data: { results: updateResults }
         });
 
@@ -404,80 +210,14 @@ export async function POST(request: NextRequest) {
 
             const now = new Date();
             
-            // Tìm và xử lý tất cả lệnh của phiên này
-            const pendingTrades = await db.collection('trades').find({
-              sessionId: sessionId,
-              status: 'pending'
-            }).toArray();
-
-            let totalWins = 0;
-            let totalLosses = 0;
-            let totalWinAmount = 0;
-            let totalLossAmount = 0;
-
-            // Xử lý từng lệnh
-            for (const trade of pendingTrades) {
-              const isWin = trade.direction === randomResult;
-              const profit = isWin ? Math.floor(trade.amount * 0.9) : 0;
-
-              // Cập nhật lệnh
-              await db.collection('trades').updateOne(
-                { _id: trade._id },
-                { 
-                  $set: { 
-                    status: 'completed', 
-                    result: isWin ? 'win' : 'lose', 
-                    profit: profit,
-                    updatedAt: now
-                  }
-                }
-              );
-
-              // Cập nhật số dư user
-              if (isWin) {
-                // ✅ SỬA LỖI: Khi thắng, cần:
-                // 1. Trả lại tiền gốc từ frozen về available
-                // 2. Cộng thêm profit vào available
-                await db.collection('users').updateOne(
-                  { _id: new ObjectId(trade.userId) },
-                  { 
-                    $inc: { 
-                      'balance.available': trade.amount + profit, // Trả tiền gốc + cộng profit
-                      'balance.frozen': -trade.amount 
-                    },
-                    $set: { updatedAt: now }
-                  }
-                );
-                totalWins++;
-                totalWinAmount += trade.amount + profit; // Tính cả tiền gốc + profit
-              } else {
-                await db.collection('users').updateOne(
-                  { _id: new ObjectId(trade.userId) },
-                  { 
-                    $inc: { 'balance.frozen': -trade.amount },
-                    $set: { updatedAt: now }
-                  }
-                );
-                totalLosses++;
-                totalLossAmount += trade.amount;
-              }
-            }
-
-            // Cập nhật phiên thành COMPLETED
+            // ✅ SỬA: Chỉ đặt kết quả, KHÔNG xử lý balance
             await db.collection('trading_sessions').updateOne(
               { sessionId },
               {
                 $set: {
                   result: randomResult,
-                  status: 'COMPLETED',
                   actualResult: randomResult,
-                  createdBy: 'admin',
-                  totalTrades: pendingTrades.length,
-                  totalWins: totalWins,
-                  totalLosses: totalLosses,
-                  totalWinAmount: totalWinAmount,
-                  totalLossAmount: totalLossAmount,
-                  completedAt: now,
+                  createdBy: 'admin', // ⚡ QUAN TRỌNG: Đánh dấu admin đặt
                   updatedAt: now
                 }
               }
@@ -486,16 +226,15 @@ export async function POST(request: NextRequest) {
             updateResults.push({ 
               sessionId, 
               result: randomResult, 
-              totalTrades: pendingTrades.length,
-              totalWins,
-              totalLosses
+              status: 'ACTIVE',
+              note: 'Cron job sẽ xử lý balance khi phiên kết thúc'
             });
           }
         }
 
         return NextResponse.json({
           success: true,
-          message: `Đã random kết quả cho ${updateResults.length} phiên`,
+          message: `Đã random kết quả cho ${updateResults.length} phiên (Cron sẽ xử lý balance sau)`,
           data: { results: updateResults }
         });
 

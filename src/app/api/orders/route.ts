@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { verifyToken } from '@/lib/auth';
 import { MongoClient, ObjectId } from 'mongodb';
+import { placeTrade, checkBalanceSufficient } from '@/lib/balanceUtils';
 
 interface UserData {
   _id: ObjectId;
-  balance: number;
+  balance: { available: number; frozen: number } | number;
   // Thêm các trường khác nếu cần
 }
 
@@ -80,8 +81,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Kiểm tra số dư
-    if (user.balance < amount) {
+    // ✅ SỬA: Sử dụng balanceUtils để kiểm tra balance
+    const hasSufficientBalance = await checkBalanceSufficient(mongoDb, userId.toString(), amount);
+    if (!hasSufficientBalance) {
       return NextResponse.json(
         { error: 'Số dư không đủ để thực hiện giao dịch' },
         { status: 400 }
@@ -100,21 +102,13 @@ export async function POST(request: Request) {
       updatedAt: new Date()
     };
 
-    // Bắt đầu session
-    const session = client.startSession();
-    
+    // ✅ SỬA: Sử dụng balanceUtils để xử lý balance an toàn
     try {
-      await session.withTransaction(async () => {
-        // Trừ số dư tài khoản
-        await mongoDb.collection('users').updateOne(
-          { _id: userId },
-          { $inc: { balance: -Number(amount) } },
-          { session }
-        );
-
-        // Lưu đơn hàng
-        await mongoDb.collection('orders').insertOne(order, { session });
-      });
+      // Sử dụng placeTrade để trừ balance và đóng băng tiền
+      await placeTrade(mongoDb, userId.toString(), amount);
+      
+      // Lưu đơn hàng
+      await mongoDb.collection('orders').insertOne(order);
 
       return NextResponse.json({
         success: true,
@@ -122,10 +116,8 @@ export async function POST(request: Request) {
       });
 
     } catch (error) {
-      console.error('Lỗi trong transaction:', error);
+      console.error('Lỗi khi đặt lệnh:', error);
       throw error;
-    } finally {
-      await session.endSession();
     }
 
   } catch (error: any) {

@@ -27,8 +27,6 @@ export async function POST(req: Request) {
     if (!asset) asset = 'Vàng/Đô la Mỹ'; // Mặc định là Vàng/Đô la Mỹ
     
     // Log dữ liệu đầu vào
-    console.log('API /trades/place - Input:', { sessionId, direction, amount, asset });
-
     if (!sessionId || !direction || !amount || !asset) {
       return NextResponse.json({ message: 'Missing required fields' }, { status: 400 });
     }
@@ -52,7 +50,6 @@ export async function POST(req: Request) {
     
     // ✅ THÊM: Kiểm tra nếu đang xử lý trade tương tự
     if (processingTrades.has(tradeKey)) {
-      console.log(`⏳ Trade ${tradeKey} đang được xử lý, trả về kết quả ngay lập tức`);
       return NextResponse.json({ 
         success: false,
         message: 'Đang xử lý lệnh, vui lòng thử lại sau'
@@ -92,7 +89,6 @@ export async function POST(req: Request) {
             }
           );
           
-          console.log(`🔄 [PLACE TRADE MIGRATION] User ${userData.username}: Chuyển đổi balance từ number sang object`);
         }
         
         const availableBalance = userBalance.available || 0;

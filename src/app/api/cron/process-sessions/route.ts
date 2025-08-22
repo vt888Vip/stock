@@ -30,11 +30,30 @@ export async function GET(request: NextRequest) {
     for (const session of expiredActiveSessions) {
       try {
         // Đối chiếu sessionId để lấy result đã có sẵn từ database
-        const sessionResult = session.result;
+        let sessionResult = session.result;
         
+        // ✅ SỬA: Nếu không có kết quả, tạo random kết quả
         if (!sessionResult) {
-          console.log(`⚠️ Cron: Phiên ${session.sessionId} không có kết quả, bỏ qua`);
-          continue;
+          console.log(`🎲 Cron: Phiên ${session.sessionId} không có kết quả, tạo random kết quả`);
+          
+          // Tạo random kết quả (50% UP, 50% DOWN)
+          const random = Math.random();
+          sessionResult = random < 0.5 ? 'UP' : 'DOWN';
+          
+          // Cập nhật kết quả cho phiên
+          await db.collection('trading_sessions').updateOne(
+            { _id: session._id },
+            { 
+              $set: { 
+                result: sessionResult,
+                actualResult: sessionResult,
+                createdBy: 'system',
+                updatedAt: now
+              }
+            }
+          );
+          
+          console.log(`🎲 Cron: Đã tạo random kết quả cho phiên ${session.sessionId}: ${sessionResult}`);
         }
 
         // Tìm tất cả lệnh pending của phiên này
@@ -129,8 +148,6 @@ export async function GET(request: NextRequest) {
     }
 
     // 2. Chức năng duy trì 30 phiên tương lai đã được tắt
-
-
     return NextResponse.json({
       success: true,
       message: `Cron job hoàn thành: Xử lý ${results.totalProcessed} phiên`,

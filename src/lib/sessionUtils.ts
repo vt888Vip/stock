@@ -1,4 +1,5 @@
 import { ObjectId } from 'mongodb';
+import { processWinTrade, processLoseTrade, calculateProfit } from '@/lib/balanceUtils';
 
 /**
  * Tạo sessionId dựa trên thời gian hiện tại
@@ -41,6 +42,9 @@ export const parseSessionId = (sessionId: string) => {
   };
 };
 
+// Cache để tránh xử lý trùng lặp
+const processedSessionsCache = new Set<string>();
+
 // Hàm xử lý phiên hết hạn và công bố kết quả
 export async function processExpiredSessions(db: any, apiName: string = 'Unknown') {
   const now = new Date();
@@ -51,20 +55,43 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
     endTime: { $lte: now }
   }).toArray();
 
-  console.log(`🔍 [${apiName}] Tìm thấy ${expiredSessions.length} phiên đã hết hạn cần xử lý (chỉ xử lý phiên có kết quả sẵn)`);
 
   for (const session of expiredSessions) {
     try {
-      console.log(`🔄 [${apiName}] Đang xử lý phiên: ${session.sessionId}`);
+      // ✅ THÊM: Kiểm tra cache để tránh xử lý trùng lặp
+      const cacheKey = `${session.sessionId}_${apiName}`;
+      if (processedSessionsCache.has(cacheKey)) {
+        continue;
+      }
+      
       
       // 1. Kiểm tra xem admin đã đặt kết quả chưa
       let result = session.result;
       let createdBy = session.createdBy || 'system';
       
       if (!result) {
-        // Nếu chưa có kết quả, bỏ qua phiên này (để cron job xử lý)
-        console.log(`⚠️ [${apiName}] Phiên ${session.sessionId} không có kết quả, bỏ qua (để cron job xử lý)`);
-        continue;
+        // ✅ SỬA: Nếu không có kết quả, tạo random kết quả
+        console.log(`🎲 [${apiName}] Phiên ${session.sessionId} không có kết quả, tạo random kết quả`);
+        
+        // Tạo random kết quả (50% UP, 50% DOWN)
+        const random = Math.random();
+        result = random < 0.5 ? 'UP' : 'DOWN';
+        createdBy = 'system';
+        
+        // Cập nhật kết quả cho phiên
+        await db.collection('trading_sessions').updateOne(
+          { _id: session._id },
+          { 
+            $set: { 
+              result: result,
+              actualResult: result,
+              createdBy: createdBy,
+              updatedAt: now
+            }
+          }
+        );
+        
+        console.log(`🎲 [${apiName}] Đã tạo random kết quả cho phiên ${session.sessionId}: ${result}`);
       } else {
         console.log(`👑 [${apiName}] Sử dụng kết quả có sẵn cho phiên ${session.sessionId}: ${result}`);
       }
@@ -84,7 +111,6 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
         }
       );
 
-      console.log(`📊 [${apiName}] Phiên ${session.sessionId} kết quả: ${result}`);
 
       // 3. Lấy tất cả lệnh của phiên này
       const trades = await db.collection('trades').find({ 
@@ -92,12 +118,11 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
         status: 'pending' 
       }).toArray();
 
-      console.log(`📋 [${apiName}] Tìm thấy ${trades.length} lệnh cần xử lý`);
 
       for (const trade of trades) {
         // 4. Xác định win/lose
         const isWin = trade.direction === result;
-        const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // Thắng được 90%
+        const profit = isWin ? calculateProfit(trade.amount, 0.9) : 0; // Thắng được 90%
         const newStatus = 'completed';
 
         // 5. Cập nhật lệnh
@@ -113,88 +138,28 @@ export async function processExpiredSessions(db: any, apiName: string = 'Unknown
           }
         );
 
-        // 6. Cập nhật số dư user
-        if (isWin) {
-          // ✅ SỬA LỖI: Sử dụng $set thay vì $inc để tránh race condition
-          // 1. Trả lại tiền gốc từ frozen về available
-          // 2. Cộng thêm profit vào available
-          
-          // Lấy balance hiện tại của user
-          const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
-          if (currentUser) {
-            // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
-            let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
-            
-            // Nếu balance là number (kiểu cũ), chuyển đổi thành object
-            if (typeof currentBalance === 'number') {
-              currentBalance = {
-                available: currentBalance,
-                frozen: 0
-              };
-              
-              console.log(`🔄 [${apiName} MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
-            }
-
-            // Tính toán balance mới
-            const newAvailableBalance = currentBalance.available + trade.amount + profit;
-            const newFrozenBalance = currentBalance.frozen - trade.amount;
-
-            await db.collection('users').updateOne(
-              { _id: new ObjectId(trade.userId) },
-              { 
-                $set: { 
-                  balance: {
-                    available: newAvailableBalance,
-                    frozen: newFrozenBalance
-                  },
-                  updatedAt: now
-                }
-              }
-            );
-            
-            console.log(`💰 [${apiName}] User ${currentUser.username} thắng: available ${currentBalance.available} → ${newAvailableBalance} (+${trade.amount + profit}), frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
+        // 6. ✅ SỬA: Sử dụng balanceUtils thay vì xử lý trực tiếp
+        try {
+          if (isWin) {
+            await processWinTrade(db, trade.userId.toString(), trade.amount, profit);
+          } else {
+            await processLoseTrade(db, trade.userId.toString(), trade.amount);
           }
-        } else {
-          // Thua: chỉ trừ tiền cược (đã bị đóng băng)
-          const currentUser = await db.collection('users').findOne({ _id: new ObjectId(trade.userId) });
-          if (currentUser) {
-            // ✅ CHUẨN HÓA: Luôn sử dụng balance dạng object
-            let currentBalance = currentUser.balance || { available: 0, frozen: 0 };
-            
-            // Nếu balance là number (kiểu cũ), chuyển đổi thành object
-            if (typeof currentBalance === 'number') {
-              currentBalance = {
-                available: currentBalance,
-                frozen: 0
-              };
-              
-              console.log(`🔄 [${apiName} MIGRATION] User ${currentUser.username}: Chuyển đổi balance từ number sang object`);
-            }
-
-            // Tính toán balance mới
-            const newFrozenBalance = currentBalance.frozen - trade.amount;
-
-            await db.collection('users').updateOne(
-              { _id: new ObjectId(trade.userId) },
-              { 
-                $set: { 
-                  balance: {
-                    ...currentBalance,
-                    frozen: newFrozenBalance
-                  },
-                  updatedAt: now
-                }
-              }
-            );
-            
-            console.log(`💸 [${apiName}] User ${currentUser.username} thua: frozen ${currentBalance.frozen} → ${newFrozenBalance} (-${trade.amount})`);
-          }
+        } catch (error) {
+          console.error(`❌ [${apiName}] Lỗi xử lý balance cho trade ${trade._id}:`, error);
         }
       }
 
-      console.log(`✅ [${apiName}] Hoàn thành xử lý phiên ${session.sessionId}`);
+      // ✅ THÊM: Đánh dấu phiên đã được xử lý
+      processedSessionsCache.add(cacheKey);
+      
     } catch (error) {
       console.error(`❌ [${apiName}] Lỗi khi xử lý phiên ${session.sessionId}:`, error);
     }
   }
+  
+  // ✅ THÊM: Cleanup cache sau 5 phút để tránh memory leak
+  setTimeout(() => {
+    processedSessionsCache.clear();
+  }, 5 * 60 * 1000);
 }

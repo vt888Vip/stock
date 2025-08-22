@@ -50,15 +50,41 @@ const formatAmount = (value: string): string => {
   return isNaN(num) ? '' : num.toLocaleString('vi-VN');
 };
 
+// Cache để tránh sync balance quá nhiều
+let balanceSyncCache = {
+  lastSync: 0,
+  lastBalance: 0,
+  isSyncing: false
+};
+
 // Hàm sync balance - chỉ sync khi tất cả trades đã hoàn thành
 async function syncBalance(
   setBalance: React.Dispatch<React.SetStateAction<number>>, 
   setIsSyncing: React.Dispatch<React.SetStateAction<boolean>>, 
   waitForPending = true,
-  setLastBalanceSync?: React.Dispatch<React.SetStateAction<number>>
+  setLastBalanceSync?: React.Dispatch<React.SetStateAction<number>>,
+  forceSync = false // ✅ THÊM: Tham số force sync
 ) {
+  // ✅ THÊM: Cache mechanism để tránh sync quá nhiều
+  const now = Date.now();
+  if (balanceSyncCache.isSyncing && !forceSync) {
+    console.log('⏭️ [BALANCE] Đang sync, bỏ qua request mới');
+    return;
+  }
+  
+  // Chỉ sync nếu đã qua 3 giây từ lần sync cuối (trừ khi force sync)
+  if (now - balanceSyncCache.lastSync < 3000 && !forceSync) {
+    console.log('⏭️ [BALANCE] Sync quá gần, sử dụng cache');
+    setBalance(balanceSyncCache.lastBalance);
+    if (setLastBalanceSync) {
+      setLastBalanceSync(balanceSyncCache.lastSync);
+    }
+    return;
+  }
+  
   let tries = 0;
   setIsSyncing(true);
+  balanceSyncCache.isSyncing = true;
     
   while (tries < 10) { // Tăng số lần thử lên 10
     try {
@@ -76,8 +102,13 @@ async function syncBalance(
       if (data.success) {
         const newBalance = data.balance.available;
         setBalance(newBalance);
+        
+        // ✅ Cập nhật cache
+        balanceSyncCache.lastSync = now;
+        balanceSyncCache.lastBalance = newBalance;
+        
         if (setLastBalanceSync) {
-          setLastBalanceSync(Date.now());
+          setLastBalanceSync(now);
         }
         break;
       } else if (res.status === 202) {
@@ -95,6 +126,7 @@ async function syncBalance(
     }
   }
   setIsSyncing(false);
+  balanceSyncCache.isSyncing = false;
 }
 
 export default function TradePage() {
@@ -256,7 +288,6 @@ export default function TradePage() {
               // Reset các trạng thái liên quan khi session mới bắt đầu
               setTradeResult({ status: 'idle' });
               setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
-              console.log('🔄 Phiên mới bắt đầu:', newSessionId);
             }
             
             setSessionStatus(sessionData.currentSession.status);
@@ -269,19 +300,18 @@ export default function TradePage() {
     // Update immediately
     updateSession();
     
-    // ✅ SMART POLLING: Polling thông minh dựa trên thời gian
+    // ✅ TỐI ƯU: Smart polling thông minh hơn
     let interval;
     if (timeLeft <= 0) {
-      interval = 1000; // Poll mỗi giây khi timer = 0 (chờ phiên mới)
+      interval = 2000; // Poll mỗi 2 giây khi timer = 0 (giảm từ 1s)
     } else if (timeLeft <= 5) {
-      interval = 1000; // Poll mỗi giây khi gần về 0
+      interval = 2000; // Poll mỗi 2 giây khi gần về 0 (giảm từ 1s)
     } else if (timeLeft <= 30) {
-      interval = 3000; // Poll mỗi 3 giây khi còn ít thời gian
+      interval = 5000; // Poll mỗi 5 giây khi còn ít thời gian (tăng từ 3s)
     } else {
-      interval = 10000; // Poll mỗi 10 giây khi còn nhiều thời gian
+      interval = 15000; // Poll mỗi 15 giây khi còn nhiều thời gian (tăng từ 10s)
     }
     
-    console.log(`⏰ Smart polling: ${interval}ms (timeLeft: ${timeLeft}s)`);
     const sessionInterval = setInterval(updateSession, interval);
     
     return () => clearInterval(sessionInterval);
@@ -323,8 +353,8 @@ export default function TradePage() {
   // ✅ THÊM: Performance monitoring cleanup
   useEffect(() => {
     return () => {
-      // Log performance summary khi component unmount
-      pollingMonitor.logSummary();
+      // ✅ TẮT: Log performance summary để giảm spam
+      // pollingMonitor.logSummary();
     };
   }, []);
 
@@ -332,7 +362,6 @@ export default function TradePage() {
   useEffect(() => {
     // Chỉ check results khi có lệnh pending và timer = 0
     if (timeLeft === 0 && tradesInCurrentSession > 0 && !countdownStarted) {
-      console.log('🔍 Bắt đầu check kết quả cho', tradesInCurrentSession, 'lệnh');
     }
   }, [timeLeft, tradesInCurrentSession, countdownStarted]);
 
@@ -348,9 +377,12 @@ export default function TradePage() {
       // Bắt đầu countdown 12 giây
       setUpdateCountdown(12); // Giữ nguyên 12 giây để tạo kịch tính
       
-      // Hàm cập nhật sau 12 giây
+      // ✅ SỬA: Hàm cập nhật sau 12 giây - TẤT CẢ CÙNG LÚC để tạo kịch tính
       const updateAfterDelay = async () => {
         try {
+          // ✅ TẮT: Log bắt đầu cập nhật để giảm spam
+          // console.log('🎬 Bắt đầu cập nhật kết quả sau 12 giây kịch tính...');
+          
           // Cập nhật lịch sử giao dịch
           const tradeHistoryResponse = await fetch('/api/trades/history', {
             headers: {
@@ -373,11 +405,18 @@ export default function TradePage() {
               }));
 
               setTradeHistory(formattedTrades);
+              // ✅ TẮT: Log cập nhật lịch sử giao dịch để giảm spam
+              // console.log('📊 Đã cập nhật lịch sử giao dịch');
             }
           }
 
           // Sync balance sau khi phiên kết thúc
           await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync);
+          // ✅ TẮT: Log cập nhật số dư để giảm spam
+          // console.log('💰 Đã cập nhật số dư');
+          
+          // ✅ TẮT: Log hoàn thành cập nhật kết quả để giảm spam
+          // console.log('🎉 Hoàn thành cập nhật kết quả!');
         } catch (error) {
           console.error('Lỗi khi cập nhật sau 12 giây:', error);
         } finally {
@@ -387,82 +426,18 @@ export default function TradePage() {
         }
       };
 
-      // Chờ 12 giây rồi cập nhật (giữ nguyên để tạo kịch tính)
+      // Chờ 12 giây rồi cập nhật TẤT CẢ (giữ nguyên để tạo kịch tính)
       setTimeout(updateAfterDelay, 12000);
 
-      // ✅ TỐI ƯU: Smart polling cho trade results
-      const pollForResults = async () => {
-        try {
-          // ✅ SỬ DỤNG MONITORING: Wrap API call với performance tracking
-          const resultData = await withPollingMonitor(
-            async () => {
-              const checkResultsResponse = await fetch('/api/trades/check-results', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-                },
-                body: JSON.stringify({ sessionId: currentSessionId })
-              });
-
-              if (!checkResultsResponse.ok) {
-                throw new Error('Check results failed');
-              }
-
-              return checkResultsResponse.json();
-            },
-            'check-results'
-          );
-
-          if (resultData.hasResult) {
-            console.log('✅ Kết quả đã sẵn sàng');
-            return true; // Trả về true để dừng polling
-          }
-        } catch (error) {
-          console.error('Lỗi khi polling kết quả:', error);
-        }
-        return false; // Trả về false để tiếp tục polling
-      };
-
-      // ✅ SMART POLLING: Polling thông minh cho kết quả
-      let pollCount = 0;
-      const pollInterval = setInterval(async () => {
-        pollCount++;
-        const hasResult = await pollForResults();
-        
-        if (hasResult) {
-          // Có kết quả rồi, dừng polling
-          clearInterval(pollInterval);
-          console.log('✅ Dừng polling kết quả');
-        } else if (pollCount >= 6) { // Giảm từ 12 xuống 6 giây
-          // Hết 6 giây, chuyển sang polling chậm hơn
-          clearInterval(pollInterval);
-          
-          // ✅ TIẾP TỤC POLLING CHẬM: Mỗi 5 giây trong 30 giây tiếp theo
-          let extendedPollCount = 0;
-          const extendedPollInterval = setInterval(async () => {
-            extendedPollCount++;
-            const hasResult = await pollForResults();
-            
-            if (hasResult) {
-              clearInterval(extendedPollInterval);
-              console.log('✅ Dừng extended polling kết quả');
-            } else if (extendedPollCount >= 6) { // 30 giây (6 * 5s)
-              clearInterval(extendedPollInterval);
-              
-              // Hiển thị thông báo cho người dùng
-              toast({
-                title: '🎲 Kết quả tự động',
-                description: 'Hệ thống sẽ tạo kết quả tự động để đảm bảo hoạt động',
-                duration: 5000,
-              });
-              
-              // Force update để tránh treo
-              await updateAfterDelay();
-            }
-          }, 3000);
-        }
-      }, 1000);
+      // ✅ ĐÃ XÓA: Smart polling cho trade results (đã xóa API check-results)
+      // Cron job sẽ tự động xử lý kết quả khi phiên kết thúc
+      // ✅ TẮT: Log thông báo để giảm spam
+      // console.log('✅ Đã xóa polling check-results, Cron job sẽ xử lý kết quả tự động');
+      
+      // ✅ SỬA: KHÔNG polling trade history nữa - để tạo kịch tính
+      // Tất cả sẽ được cập nhật sau 12 giây cùng lúc
+      // ✅ TẮT: Log thông báo để giảm spam
+      // console.log('⏰ Không polling trade history nữa - chờ 12 giây để cập nhật cùng lúc');
 
       // Trigger session update by calling the API again
       const forceUpdateSession = async () => {
@@ -549,7 +524,6 @@ export default function TradePage() {
     const minSyncInterval = 5000; // 5 giây
     
     if (timeSinceLastSync < minSyncInterval) {
-      console.log('⏳ [BALANCE] Chưa đủ thời gian để sync balance lại:', Math.ceil((minSyncInterval - timeSinceLastSync) / 1000), 'giây');
     }
   }, [lastBalanceSync]);
 
@@ -712,7 +686,12 @@ export default function TradePage() {
         };
 
         setTradeHistory(prev => [newTrade, ...prev]);
-        // Nếu có quản lý frozen, có thể cập nhật thêm ở đây
+        
+        // ✅ SỬA: Cập nhật balance ngay lập tức trên UI
+        setBalance(prevBalance => {
+          const newBalance = prevBalance - Number(amount);
+          return newBalance;
+        });
 
         setAmount('');
         setSelectedAction(null);
@@ -730,14 +709,17 @@ export default function TradePage() {
           duration: 2500, // Tự động đóng sau 2.5 giây
         });
 
-        // Sync balance ngay sau khi đặt lệnh để cập nhật UI chính xác
-        setTimeout(async () => {
-          try {
-            await syncBalance(setBalance, setIsSyncingBalance, false, setLastBalanceSync);
-          } catch (error) {
-            console.error('❌ [TRADE] Lỗi khi sync balance sau đặt lệnh:', error);
-          }
-        }, 1000); // Chờ 1 giây để backend xử lý xong
+        // ✅ SỬA: Sync balance ngay lập tức sau khi đặt lệnh
+        try {
+          // Reset cache để force sync balance ngay lập tức
+          balanceSyncCache.lastSync = 0;
+          balanceSyncCache.isSyncing = false;
+          
+          // Sync balance ngay lập tức với force sync
+          await syncBalance(setBalance, setIsSyncingBalance, false, setLastBalanceSync, true);
+        } catch (error) {
+          console.error('❌ [TRADE] Lỗi khi sync balance sau đặt lệnh:', error);
+        }
       }
     } catch (error) {
       console.error('Lỗi khi đặt lệnh:', error);

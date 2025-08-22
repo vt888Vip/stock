@@ -49,17 +49,20 @@ class PollingMonitor {
     const successRate = this.stats.successfulRequests / this.stats.totalRequests;
     const requestsPerMinute = this.stats.totalRequests / ((Date.now() - this.startTime) / 60000);
 
-    if (successRate < 0.9) {
-      console.warn('⚠️ Polling success rate thấp:', (successRate * 100).toFixed(1) + '%');
-    }
+    // ✅ TẮT: Log warning success rate thấp để giảm spam
+    // if (successRate < 0.9) {
+    //   console.warn('⚠️ Polling success rate thấp:', (successRate * 100).toFixed(1) + '%');
+    // }
 
-    if (requestsPerMinute > 30) {
-      console.warn('⚠️ Polling quá nhiều:', requestsPerMinute.toFixed(1) + ' requests/phút');
-    }
+    // ✅ TẮT: Log warning polling quá nhiều để giảm spam
+    // if (requestsPerMinute > 30) {
+    //   console.warn('⚠️ Polling quá nhiều:', requestsPerMinute.toFixed(1) + ' requests/phút');
+    // }
 
-    if (this.stats.averageResponseTime > 2000) {
-      console.warn('⚠️ Response time cao:', this.stats.averageResponseTime.toFixed(0) + 'ms');
-    }
+    // ✅ TẮT: Log warning response time cao để giảm spam
+    // if (this.stats.averageResponseTime > 2000) {
+    //   console.warn('⚠️ Response time cao:', this.stats.averageResponseTime.toFixed(0) + 'ms');
+    // }
   }
 
   /**
@@ -117,7 +120,8 @@ export const withPollingMonitor = async <T>(
     const responseTime = Date.now() - startTime;
     
     pollingMonitor.logRequest(true, responseTime);
-    console.log(`✅ ${endpoint}: ${responseTime}ms`);
+    // ✅ TẮT: Log success từng request để giảm spam
+    // console.log(`✅ ${endpoint}: ${responseTime}ms`);
     
     return result;
   } catch (error) {
