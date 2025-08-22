@@ -13,16 +13,18 @@ declare global {
 
 const MONGODB_URI = process.env.MONGODB_URI;
 
-// Log để debug
-console.log('Đang kiểm tra MONGODB_URI:', {
-  MONGODB_URI: MONGODB_URI ? 'Đã cấu hình' : 'Chưa cấu hình',
-  NODE_ENV: process.env.NODE_ENV,
-  CWD: process.cwd()
-});
+// Log để debug (chỉ trong development)
+if (process.env.NODE_ENV === 'development') {
+  console.log('Đang kiểm tra MONGODB_URI:', {
+    MONGODB_URI: MONGODB_URI ? 'Đã cấu hình' : 'Chưa cấu hình',
+    NODE_ENV: process.env.NODE_ENV,
+    CWD: process.cwd()
+  });
+}
 
 if (!MONGODB_URI) {
   console.error('Lỗi: MONGODB_URI chưa được cấu hình trong file .env.local');
-  process.exit(1);
+  throw new Error('MONGODB_URI chưa được cấu hình');
 }
 
 const MONGODB_DB = process.env.MONGODB_DB || 'financial_platform';
@@ -36,15 +38,21 @@ if (!global.mongoose) {
 }
 
 export async function connectToDatabase() {
-  console.log('Đang thiết lập kết nối tới MongoDB Atlas...');
+  if (process.env.NODE_ENV === 'development') {
+    console.log('Đang thiết lập kết nối tới MongoDB Atlas...');
+  }
   
   if (cached.conn) {
-    console.log('Sử dụng kết nối database đã được cache');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Sử dụng kết nối database đã được cache');
+    }
     return cached.conn;
   }
 
   if (!cached.promise) {
-    console.log('Tạo kết nối mới tới MongoDB...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Tạo kết nối mới tới MongoDB...');
+    }
     
     if (!MONGODB_URI) {
       throw new Error('MONGODB_URI không được định nghĩa');
@@ -59,11 +67,15 @@ export async function connectToDatabase() {
       appName: 'TradingApp',
     };
 
-    console.log(`Kết nối tới MongoDB với URI: ${MONGODB_URI.split('@')[1]?.split('?')[0] || MONGODB_URI}`);
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`Kết nối tới MongoDB với URI: ${MONGODB_URI.split('@')[1]?.split('?')[0] || MONGODB_URI}`);
+    }
 
     cached.promise = mongoose.connect(MONGODB_URI, opts)
       .then((mongoose) => {
-        console.log('✅ Đã kết nối thành công tới MongoDB Atlas');
+        if (process.env.NODE_ENV === 'development') {
+          console.log('✅ Đã kết nối thành công tới MongoDB Atlas');
+        }
         return mongoose;
       })
       .catch((error) => {
@@ -73,9 +85,13 @@ export async function connectToDatabase() {
   }
 
   try {
-    console.log('Waiting for database connection...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Waiting for database connection...');
+    }
     cached.conn = await cached.promise;
-    console.log('Database connection established');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('Database connection established');
+    }
   } catch (e) {
     console.error('Failed to connect to MongoDB:', e);
     cached.promise = null;
@@ -91,7 +107,9 @@ export async function connectToDatabase() {
  */
 export async function getMongoDb() {
   try {
-    console.log('🔄 Đang lấy kết nối MongoDB...');
+    if (process.env.NODE_ENV === 'development') {
+      console.log('🔄 Đang lấy kết nối MongoDB...');
+    }
     
     if (!MONGODB_URI) {
       throw new Error('MONGODB_URI chưa được cấu hình');
@@ -103,7 +121,9 @@ export async function getMongoDb() {
       throw new Error('Không thể thiết lập kết nối MongoDB');
     }
     
-    console.log('✅ Đã kết nối thành công tới database:', mongoose.connection.db.databaseName);
+    if (process.env.NODE_ENV === 'development') {
+      console.log('✅ Đã kết nối thành công tới database:', mongoose.connection.db.databaseName);
+    }
     return mongoose.connection.db;
   } catch (error) {
     console.error('❌ Lỗi khi kết nối MongoDB:', error instanceof Error ? error.message : 'Unknown error');
