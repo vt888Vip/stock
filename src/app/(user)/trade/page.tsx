@@ -161,6 +161,7 @@ export default function TradePage() {
   const [isBalanceLocked, setIsBalanceLocked] = useState(false);
   const [lastBalanceSync, setLastBalanceSync] = useState<number>(0);
   const [tradesInCurrentSession, setTradesInCurrentSession] = useState<number>(0);
+  const [processedSessionId, setProcessedSessionId] = useState<string>('');
 
   // Load user balance and current session
   useEffect(() => {
@@ -281,14 +282,19 @@ export default function TradePage() {
             // Cập nhật timeLeft
             setTimeLeft(newTimeLeft);
             
-            // Nếu phiên thay đổi, cập nhật sessionId và reset các trạng thái
-            if (sessionChanged || newSessionId !== currentSessionId) {
-              setCurrentSessionId(newSessionId);
-              
-              // Reset các trạng thái liên quan khi session mới bắt đầu
-              setTradeResult({ status: 'idle' });
-              setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
-            }
+                         // Nếu phiên thay đổi, cập nhật sessionId và reset các trạng thái
+             if (sessionChanged || newSessionId !== currentSessionId) {
+               console.log(`🔄 [SESSION] Session changed: ${currentSessionId} -> ${newSessionId}`);
+               setCurrentSessionId(newSessionId);
+               
+               // Reset các trạng thái liên quan khi session mới bắt đầu
+               setTradeResult({ status: 'idle' });
+               setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
+               setCountdownStarted(false); // Reset countdown
+               setIsBalanceLocked(false); // Unlock balance
+               setUpdateCountdown(null); // Reset update countdown
+               setProcessedSessionId(''); // Reset processed session ID
+             }
             
             setSessionStatus(sessionData.currentSession.status);
           }
@@ -367,7 +373,15 @@ export default function TradePage() {
 
   // Force update session when timeLeft reaches 0
   useEffect(() => {
-    if (timeLeft === 0 && !countdownStarted) {  
+    if (timeLeft === 0 && !countdownStarted && currentSessionId !== processedSessionId) {  
+      console.log(`🎯 [RESULT] Timer = 0, bắt đầu xử lý kết quả phiên...`);
+      console.log(`🎯 [RESULT] Thời gian hiện tại: ${new Date().toLocaleTimeString()}`);
+      console.log(`🎯 [RESULT] Session ID: ${currentSessionId}`);
+      console.log(`🎯 [RESULT] Trades trong phiên hiện tại: ${tradesInCurrentSession}`);
+      
+      // Đánh dấu session này đã được xử lý
+      setProcessedSessionId(currentSessionId);
+      
       // Đánh dấu countdown đã bắt đầu để tránh bắt đầu lại
       setCountdownStarted(true);
       
@@ -377,136 +391,166 @@ export default function TradePage() {
       // Bắt đầu countdown 12 giây
       setUpdateCountdown(12); // Giữ nguyên 12 giây để tạo kịch tính
       
-             // ✅ OPTION 1: Xử lý kết quả ngay lập tức khi timer = 0
-               const processSessionResults = async () => {
-          try {
-            // ✅ TẮT: Log bắt đầu để giảm spam
-            // console.log('🎬 Bắt đầu xử lý kết quả phiên...');
-            
-            // ✅ BƯỚC 1: Trigger session processing ngay lập tức
-            let sessionProcessed = false;
-            for (let i = 0; i < 3; i++) {
-              try {
-                const sessionResponse = await fetch('/api/trading-sessions/process-result', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' }
-                });
-                if (sessionResponse.ok) {
-                  const sessionData = await sessionResponse.json();
-                  // ✅ TẮT: Log session processed để giảm spam
-                  // console.log('✅ Session processed:', sessionData.message);
-                  sessionProcessed = true;
-                  break;
-                }
-              } catch (error) {
-                console.error(`❌ Session processing attempt ${i + 1} failed:`, error);
-                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            }
-            
-            if (!sessionProcessed) {
-              console.error('❌ Không thể process sessions sau 3 lần thử');
-            }
-            
-            // ✅ TẮT: Log hoàn thành để giảm spam
-            // console.log('🎉 Hoàn thành xử lý kết quả phiên!');
-          } catch (error) {
-            console.error('❌ Lỗi khi xử lý kết quả phiên:', error);
-          }
-        };
-
-       // ✅ BƯỚC 1: Xử lý kết quả ngay lập tức
-       processSessionResults();
-       
-               // ✅ BƯỚC 2: Cập nhật UI sau 12 giây để tạo kịch tính
-        const updateUIAfterDelay = async () => {
-          try {
-            // ✅ TẮT: Log bắt đầu cập nhật UI để giảm spam
-            // console.log('🎬 Bắt đầu cập nhật UI sau 12 giây kịch tính...');
-            
-            // ✅ BƯỚC 1: Cập nhật lịch sử giao dịch với retry
-            let tradeHistoryUpdated = false;
-            for (let i = 0; i < 3; i++) {
-              try {
-                const tradeHistoryResponse = await fetch('/api/trades/history', {
-                  headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
-                });
-
-                if (tradeHistoryResponse.ok) {
-                  const tradeHistoryData = await tradeHistoryResponse.json();
-                  if (tradeHistoryData.trades && tradeHistoryData.trades.length > 0) {
-                    const formattedTrades: TradeHistoryRecord[] = tradeHistoryData.trades.map((trade: any) => ({
-                      id: trade._id || trade._id.toString(),
-                      sessionId: trade.sessionId,
-                      direction: trade.direction,
-                      amount: trade.amount,
-                      status: trade.status || 'pending',
-                      result: trade.result,
-                      profit: trade.profit || 0,
-                      createdAt: trade.createdAt || new Date().toISOString(),
-                    }));
-
-                    setTradeHistory(formattedTrades);
-                    // ✅ TẮT: Log trade history updated để giảm spam
-                    // console.log('✅ Trade history updated');
-                    tradeHistoryUpdated = true;
-                    break;
-                  }
-                }
-              } catch (error) {
-                console.error(`❌ Trade history update attempt ${i + 1} failed:`, error);
-                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
-              }
-            }
-            
-            if (!tradeHistoryUpdated) {
-              console.error('❌ Không thể cập nhật trade history sau 3 lần thử');
-            }
-
-            // ✅ BƯỚC 2: Sync balance với retry
-            let balanceSynced = false;
-            for (let i = 0; i < 3; i++) {
-              try {
-                await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync, true);
-                // ✅ TẮT: Log balance synced để giảm spam
-                // console.log('✅ Balance synced');
-                balanceSynced = true;
+      // ✅ OPTION 1: Xử lý kết quả ngay lập tức khi timer = 0
+      const processSessionResults = async () => {
+        try {
+          console.log(`🎬 [RESULT] Bắt đầu xử lý kết quả phiên...`);
+          console.log(`🎬 [RESULT] Thời gian: ${new Date().toLocaleTimeString()}`);
+          
+          // ✅ BƯỚC 1: Trigger session processing ngay lập tức
+          let sessionProcessed = false;
+          for (let i = 0; i < 3; i++) {
+            try {
+              console.log(`🔄 [RESULT] Gọi API process-result lần ${i + 1}...`);
+              const sessionResponse = await fetch('/api/trading-sessions/process-result', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+              if (sessionResponse.ok) {
+                const sessionData = await sessionResponse.json();
+                console.log(`✅ [RESULT] Session processed thành công:`, sessionData.message);
+                console.log(`✅ [RESULT] Chi tiết kết quả:`, sessionData.results);
+                sessionProcessed = true;
                 break;
-              } catch (error) {
-                console.error(`❌ Balance sync attempt ${i + 1} failed:`, error);
-                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+              } else {
+                console.error(`❌ [RESULT] API process-result lần ${i + 1} failed với status:`, sessionResponse.status);
               }
+            } catch (error) {
+              console.error(`❌ [RESULT] Session processing attempt ${i + 1} failed:`, error);
+              if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
             }
-            
-            if (!balanceSynced) {
-              console.error('❌ Không thể sync balance sau 3 lần thử');
-            }
-            
-            // ✅ TẮT: Log hoàn thành cập nhật UI để giảm spam
-            // console.log('🎉 Hoàn thành cập nhật UI sau 12 giây!');
-          } catch (error) {
-            console.error('Lỗi khi cập nhật UI sau 12 giây:', error);
-          } finally {
-            setUpdateCountdown(null);
-            setCountdownStarted(false);
-            setIsBalanceLocked(false);
           }
-        };
+          
+          if (!sessionProcessed) {
+            console.error('❌ [RESULT] Không thể process sessions sau 3 lần thử');
+          } else {
+            console.log('🎉 [RESULT] Hoàn thành xử lý kết quả phiên!');
+          }
+        } catch (error) {
+          console.error('❌ [RESULT] Lỗi khi xử lý kết quả phiên:', error);
+        }
+      };
 
-       // ✅ BƯỚC 2: Chờ 12 giây rồi cập nhật UI
-       setTimeout(updateUIAfterDelay, 12000);
-
-      // ✅ ĐÃ XÓA: Smart polling cho trade results (đã xóa API check-results)
-      // Cron job sẽ tự động xử lý kết quả khi phiên kết thúc
-      // ✅ TẮT: Log thông báo để giảm spam
-      // console.log('✅ Đã xóa polling check-results, Cron job sẽ xử lý kết quả tự động');
+      // ✅ BƯỚC 1: Xử lý kết quả ngay lập tức
+      processSessionResults();
       
-      // ✅ SỬA: KHÔNG polling trade history nữa - để tạo kịch tính
-      // Tất cả sẽ được cập nhật sau 12 giây cùng lúc
-      // ✅ TẮT: Log thông báo để giảm spam
-      // console.log('⏰ Không polling trade history nữa - chờ 12 giây để cập nhật cùng lúc');
+      // ✅ BƯỚC 2: Cập nhật UI sau 12 giây để tạo kịch tính
+      const updateUIAfterDelay = async () => {
+        try {
+          console.log(`🎬 [UI] Bắt đầu cập nhật UI sau 12 giây kịch tính...`);
+          console.log(`🎬 [UI] Thời gian: ${new Date().toLocaleTimeString()}`);
+          
+          // ✅ BƯỚC 1: Cập nhật lịch sử giao dịch với retry
+          let tradeHistoryUpdated = false;
+          for (let i = 0; i < 3; i++) {
+            try {
+              console.log(`🔄 [UI] Gọi API trade history lần ${i + 1}...`);
+              const tradeHistoryResponse = await fetch('/api/trades/history', {
+                headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+              });
 
-      // Trigger session update by calling the API again
+              if (tradeHistoryResponse.ok) {
+                const tradeHistoryData = await tradeHistoryResponse.json();
+                console.log(`📊 [UI] Trade history data:`, tradeHistoryData);
+                
+                if (tradeHistoryData.trades && tradeHistoryData.trades.length > 0) {
+                  const formattedTrades: TradeHistoryRecord[] = tradeHistoryData.trades.map((trade: any) => ({
+                    id: trade._id || trade._id.toString(),
+                    sessionId: trade.sessionId,
+                    direction: trade.direction,
+                    amount: trade.amount,
+                    status: trade.status || 'pending',
+                    result: trade.result,
+                    profit: trade.profit || 0,
+                    createdAt: trade.createdAt || new Date().toISOString(),
+                  }));
+
+                  setTradeHistory(formattedTrades);
+                  console.log(`✅ [UI] Trade history updated thành công`);
+                  console.log(`✅ [UI] Số lượng trades: ${formattedTrades.length}`);
+                  console.log(`✅ [UI] Trades mới nhất:`, formattedTrades.slice(0, 3));
+                  tradeHistoryUpdated = true;
+                  break;
+                } else {
+                  console.log(`📊 [UI] Không có trades trong response`);
+                }
+              } else {
+                console.error(`❌ [UI] API trade history lần ${i + 1} failed với status:`, tradeHistoryResponse.status);
+              }
+            } catch (error) {
+              console.error(`❌ [UI] Trade history update attempt ${i + 1} failed:`, error);
+              if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+          
+          if (!tradeHistoryUpdated) {
+            console.error('❌ [UI] Không thể cập nhật trade history sau 3 lần thử');
+          }
+
+          // ✅ BƯỚC 2: Sync balance với retry
+          let balanceSynced = false;
+          for (let i = 0; i < 3; i++) {
+            try {
+              console.log(`🔄 [UI] Gọi API sync balance lần ${i + 1}...`);
+              await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync, true);
+              console.log(`✅ [UI] Balance synced thành công`);
+              balanceSynced = true;
+              break;
+            } catch (error) {
+              console.error(`❌ [UI] Balance sync attempt ${i + 1} failed:`, error);
+              if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+          }
+          
+          if (!balanceSynced) {
+            console.error('❌ [UI] Không thể sync balance sau 3 lần thử');
+          }
+          
+          console.log(`🎉 [UI] Hoàn thành cập nhật UI sau 12 giây!`);
+        } catch (error) {
+          console.error('❌ [UI] Lỗi khi cập nhật UI sau 12 giây:', error);
+        } finally {
+          setUpdateCountdown(null);
+          setCountdownStarted(false);
+          setIsBalanceLocked(false);
+          console.log(`🔍 [UI] Reset các state flags`);
+        }
+      };
+
+      // ✅ BƯỚC 2: Chờ 12 giây rồi cập nhật UI
+      console.log(`⏰ [RESULT] Đặt timeout 12 giây để cập nhật UI...`);
+      setTimeout(() => {
+        console.log(`⏰ [RESULT] Timeout 12 giây đã hoàn thành, bắt đầu updateUIAfterDelay`);
+        updateUIAfterDelay();
+      }, 12000);
+
+      // ✅ SỬA: KHÔNG force update session ngay lập tức nữa
+      // Để UI có thể cập nhật kết quả của phiên hiện tại trước khi chuyển phiên
+      // Session sẽ được cập nhật tự động thông qua polling
+    }
+  }, [timeLeft, currentSessionId, toast, countdownStarted, tradesInCurrentSession, processedSessionId]);
+
+  // Track which trades have been processed to prevent duplicate updates
+  const processedTradesRef = useRef<Set<string>>(new Set());
+
+  // Reset countdownStarted và isBalanceLocked khi session mới bắt đầu
+  useEffect(() => {
+    if (timeLeft > 0 && countdownStarted) {
+      console.log(`🔄 [RESET] Reset countdownStarted vì timeLeft > 0 (${timeLeft})`);
+      setCountdownStarted(false);
+    }
+    if (timeLeft > 0 && isBalanceLocked) {
+      console.log(`🔄 [RESET] Reset isBalanceLocked vì timeLeft > 0 (${timeLeft})`);
+      setIsBalanceLocked(false);
+    }
+  }, [timeLeft, countdownStarted, isBalanceLocked]);
+
+  // ✅ THÊM: Force update session sau khi UI đã được cập nhật
+  useEffect(() => {
+    // Khi updateCountdown từ 12 về null (UI đã được cập nhật xong)
+    if (updateCountdown === null && countdownStarted) {
+      console.log(`🔄 [SESSION] UI đã được cập nhật xong, force update session...`);
+      
       const forceUpdateSession = async () => {
         try {
           const sessionResponse = await fetch('/api/trading-sessions/session-change');
@@ -516,36 +560,25 @@ export default function TradePage() {
               const newSessionId = sessionData.currentSession.sessionId;
               const newTimeLeft = sessionData.currentSession.timeLeft;
               
+              console.log(`🔄 [SESSION] Force update session: ${currentSessionId} -> ${newSessionId}, timeLeft: ${newTimeLeft}`);
+              
               setCurrentSessionId(newSessionId);
               setTimeLeft(newTimeLeft);
               
               // Reset trade result
               setTradeResult({ status: 'idle' });
-
+              setTradesInCurrentSession(0); // Reset số lệnh trong phiên mới
             }
           }
         } catch (error) {
-          console.error('Lỗi khi force update session:', error);
+          console.error('❌ [SESSION] Lỗi khi force update session:', error);
         }
       };
       
-      // Delay a bit to ensure backend has processed the session change
+      // Delay 1 giây để đảm bảo UI đã được cập nhật hoàn toàn
       setTimeout(forceUpdateSession, 1000);
     }
-  }, [timeLeft, currentSessionId, toast, countdownStarted]);
-
-  // Track which trades have been processed to prevent duplicate updates
-  const processedTradesRef = useRef<Set<string>>(new Set());
-
-  // Reset countdownStarted và isBalanceLocked khi session mới bắt đầu
-  useEffect(() => {
-    if (timeLeft > 0 && countdownStarted) {
-      setCountdownStarted(false);
-    }
-    if (timeLeft > 0 && isBalanceLocked) {
-      setIsBalanceLocked(false);
-    }
-  }, [timeLeft, countdownStarted, isBalanceLocked]);
+  }, [updateCountdown, countdownStarted, currentSessionId]);
 
   // Quản lý countdown cập nhật
   useEffect(() => {
@@ -891,6 +924,9 @@ export default function TradePage() {
                           <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
                           <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
                           <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                          <div>Countdown Started: {countdownStarted ? 'Yes' : 'No'}</div>
+                          <div>Trades in Session: {tradesInCurrentSession}</div>
+                          <div>Processed Session: {processedSessionId}</div>
                           <div className="mt-1 pt-1 border-t border-blue-300">
                             <button 
                               onClick={async () => {
@@ -1112,6 +1148,9 @@ export default function TradePage() {
                         <div>Last Sync: {lastBalanceSync ? new Date(lastBalanceSync).toLocaleTimeString() : 'Never'}</div>
                         <div>Balance Locked: {isBalanceLocked ? 'Yes' : 'No'}</div>
                         <div>Syncing: {isSyncingBalance ? 'Yes' : 'No'}</div>
+                        <div>Countdown Started: {countdownStarted ? 'Yes' : 'No'}</div>
+                        <div>Trades in Session: {tradesInCurrentSession}</div>
+                        <div>Processed Session: {processedSessionId}</div>
                         <div className="mt-1 pt-1 border-t border-blue-300">
                           <button 
                             onClick={async () => {
