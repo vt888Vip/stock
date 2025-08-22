@@ -46,4 +46,4 @@ const nextConfig = {
   // Removed external API rewrites for local-only setup
 };
 
-module.exports = nextConfig;
+export default nextConfig;
