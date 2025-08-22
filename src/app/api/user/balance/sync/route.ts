@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const waitForPendingTrades = searchParams.get('waitForPending') === 'true';
+    const forceSync = searchParams.get('force') === 'true'; // ✅ THÊM: Force sync parameter
 
     const db = await getMongoDb();
     const userId = new ObjectId(tokenData.userId);
@@ -42,8 +43,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, message: 'Không tìm thấy người dùng' }, { status: 404 });
     }
 
-    // Nếu cần chờ pending trades hoàn thành
-    if (waitForPendingTrades) {
+    // Nếu cần chờ pending trades hoàn thành và không phải force sync
+    if (waitForPendingTrades && !forceSync) {
       // Kiểm tra xem có trades nào đang pending không
       const pendingTrades = await db.collection('trades').find({
         userId: userId,
@@ -52,6 +53,7 @@ export async function GET(request: NextRequest) {
 
       // Nếu còn trades pending, trả về status 202 (chưa sẵn sàng)
       if (pendingTrades.length > 0) {
+        console.log(`⏭️ [SYNC] User ${user.username} còn ${pendingTrades.length} trades pending, chưa sync balance`);
         return NextResponse.json({ 
           success: false,
           message: 'Còn lệnh giao dịch đang xử lý',
@@ -59,6 +61,11 @@ export async function GET(request: NextRequest) {
           balance: user.balance || { available: 0, frozen: 0 }
         }, { status: 202 });
       }
+    }
+    
+    // ✅ THÊM: Log khi force sync
+    if (forceSync) {
+      console.log(`🔄 [SYNC] Force sync balance cho user ${user.username}`);
     }
 
     // Lấy số dư từ field balance của user

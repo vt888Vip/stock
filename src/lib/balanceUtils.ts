@@ -84,11 +84,13 @@ export async function placeTrade(db: any, userId: string, amount: number): Promi
 
 /**
  * Xử lý kết quả thắng - Trả lại tiền gốc + cộng profit
- * ✅ SỬA: Sử dụng MongoDB Aggregation Pipeline để tránh cộng dồn
+ * ✅ SỬA: Logic chính xác - available += (tradeAmount + profit), frozen -= tradeAmount
  */
 export async function processWinTrade(db: any, userId: string, tradeAmount: number, profit: number): Promise<boolean> {
   try {
-    // ✅ SỬA: Sử dụng Aggregation Pipeline để tính toán chính xác
+    // ✅ SỬA: Logic chính xác - khi thắng:
+    // available += (tradeAmount + profit) - trả lại tiền gốc + thêm lợi nhuận
+    // frozen -= tradeAmount - trừ tiền đóng băng
     const updateResult = await db.collection('users').updateOne(
       { _id: new ObjectId(userId) },
       [
@@ -97,15 +99,15 @@ export async function processWinTrade(db: any, userId: string, tradeAmount: numb
             balance: {
               available: {
                 $add: [
-                  { $ifNull: ['$balance.available', 0] },  // available hiện tại
-                  tradeAmount,  // ✅ SỬA: Chỉ trả lại amount gốc, không cộng dồn frozen
-                  profit        // Cộng thêm tiền thắng
+                  { $ifNull: ['$balance.available', 0] },
+                  tradeAmount,  // Trả lại tiền gốc
+                  profit        // Cộng thêm lợi nhuận
                 ]
               },
               frozen: {
                 $subtract: [
-                  { $ifNull: ['$balance.frozen', 0] },     // frozen hiện tại
-                  tradeAmount   // Chỉ trừ amount gốc của lệnh này
+                  { $ifNull: ['$balance.frozen', 0] },
+                  tradeAmount   // Trừ tiền đóng băng
                 ]
               }
             },
@@ -119,7 +121,7 @@ export async function processWinTrade(db: any, userId: string, tradeAmount: numb
       throw new Error('Không thể cập nhật balance cho user thắng');
     }
 
-    console.log(`✅ [BALANCE WIN] User ${userId}: +${tradeAmount} (gốc) +${profit} (thắng), frozen -${tradeAmount}`);
+    console.log(`✅ [BALANCE WIN] User ${userId}: available +${tradeAmount + profit} (gốc + lợi nhuận), frozen -${tradeAmount} (trả gốc)`);
     return true;
   } catch (error) {
     console.error(`❌ [BALANCE] Lỗi xử lý thắng user ${userId}:`, error);

@@ -37,7 +37,7 @@ import {
 import UploadImage from '@/components/UploadImage';
 import { useToast } from '@/components/ui/use-toast';
 
-type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'orders' | 'session-results' | 'predictions';
+type TabType = 'dashboard' | 'users' | 'transactions' | 'deposits' | 'banks' | 'orders' | 'session-results' | 'predictions' | 'balance-fix';
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -88,6 +88,10 @@ export default function AdminDashboard() {
   const [selectedSession, setSelectedSession] = useState<any>(null);
   const [showSetResultDialog, setShowSetResultDialog] = useState(false);
   const [selectedResult, setSelectedResult] = useState<'UP' | 'DOWN'>('UP');
+  
+  // Balance fix states
+  const [invalidUsers, setInvalidUsers] = useState<any[]>([]);
+  const [loadingInvalidUsers, setLoadingInvalidUsers] = useState(false);
 
   // Search states
   const [searchName, setSearchName] = useState('');
@@ -634,7 +638,74 @@ export default function AdminDashboard() {
     }
   };
 
+  // Balance Fix Functions
+  const loadInvalidUsers = async () => {
+    try {
+      setLoadingInvalidUsers(true);
+      const response = await fetch('/api/admin/fix-balance', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        setInvalidUsers(data.data?.users || []);
+      } else {
+        toast({
+          title: 'Lỗi',
+          description: 'Không thể kiểm tra balance',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error loading invalid users:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể kiểm tra balance',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoadingInvalidUsers(false);
+    }
+  };
 
+  const fixUserBalance = async (userId: string) => {
+    try {
+      const response = await fetch('/api/admin/fix-balance', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ userId })
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        toast({
+          title: 'Thành công',
+          description: data.message,
+        });
+        // Reload invalid users list
+        loadInvalidUsers();
+      } else {
+        const errorData = await response.json();
+        toast({
+          title: 'Lỗi',
+          description: errorData.message || 'Không thể sửa balance',
+          variant: 'destructive',
+        });
+      }
+    } catch (error) {
+      console.error('Error fixing user balance:', error);
+      toast({
+        title: 'Lỗi',
+        description: 'Không thể sửa balance',
+        variant: 'destructive',
+      });
+    }
+  };
 
   // Nút đặt kết quả cho 30 phiên - Random kết quả hàng loạt
   const handleSetResultsFor30Sessions = async () => {
@@ -908,6 +979,17 @@ export default function AdminDashboard() {
             >
               <Target className="h-4 w-4 inline mr-2" />
               Kết quả phiên giao dịch
+            </button>
+            <button
+              onClick={() => setActiveTab('balance-fix')}
+              className={`py-4 px-4 rounded-lg font-medium text-sm transition-all duration-200 ${
+                activeTab === 'balance-fix'
+                  ? 'bg-blue-100 text-blue-700 border border-blue-200'
+                  : 'text-gray-600 hover:text-gray-800 hover:bg-gray-50'
+              }`}
+            >
+              <Zap className="h-4 w-4 inline mr-2" />
+              Sửa Balance
             </button>
           </div>
         </div>
@@ -1610,6 +1692,104 @@ export default function AdminDashboard() {
                     Mở trang dự đoán
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
+        {/* Balance Fix Tab */}
+        {activeTab === 'balance-fix' && (
+          <div className="space-y-6">
+            <Card className="bg-gradient-to-r from-orange-50 to-red-50 border-orange-200">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2 text-orange-800">
+                  <Zap className="h-5 w-5" />
+                  Sửa lỗi Balance
+                </CardTitle>
+                <CardDescription className="text-orange-700">
+                  Kiểm tra và sửa lỗi balance không nhất quán của người dùng
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="mb-4">
+                  <Button 
+                    onClick={loadInvalidUsers}
+                    disabled={loadingInvalidUsers}
+                    className="bg-orange-600 hover:bg-orange-700"
+                  >
+                    {loadingInvalidUsers ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Zap className="h-4 w-4 mr-2" />
+                    )}
+                    Kiểm tra Balance không hợp lệ
+                  </Button>
+                </div>
+
+                {invalidUsers.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="bg-orange-50">
+                          <TableHead className="text-orange-800">Username</TableHead>
+                          <TableHead className="text-orange-800">Email</TableHead>
+                          <TableHead className="text-orange-800">Available</TableHead>
+                          <TableHead className="text-orange-800">Frozen</TableHead>
+                          <TableHead className="text-orange-800">Tổng</TableHead>
+                          <TableHead className="text-orange-800">Vấn đề</TableHead>
+                          <TableHead className="text-orange-800">Thao tác</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {invalidUsers.map((user) => (
+                          <TableRow key={user.id} className="hover:bg-orange-50">
+                            <TableCell className="font-medium">{user.username}</TableCell>
+                            <TableCell>{user.email}</TableCell>
+                            <TableCell className={user.balance.available < 0 ? 'text-red-600 font-bold' : ''}>
+                              {user.balance.available.toLocaleString()}
+                            </TableCell>
+                            <TableCell className={user.balance.frozen < 0 ? 'text-red-600 font-bold' : ''}>
+                              {user.balance.frozen.toLocaleString()}
+                            </TableCell>
+                            <TableCell className="font-bold">
+                              {(user.balance.available + user.balance.frozen).toLocaleString()}
+                            </TableCell>
+                            <TableCell>
+                              <div className="space-y-1">
+                                {user.hasNegativeBalance && (
+                                  <Badge variant="destructive" className="text-xs">Balance âm</Badge>
+                                )}
+                                {user.hasOldFormat && (
+                                  <Badge variant="outline" className="text-xs">Định dạng cũ</Badge>
+                                )}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                onClick={() => fixUserBalance(user.id)}
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                <Zap className="h-3 w-3 mr-1" />
+                                Sửa
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+
+                {invalidUsers.length === 0 && !loadingInvalidUsers && (
+                  <div className="text-center py-8">
+                    <Zap className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium mb-2 text-green-800">Không có lỗi balance</h3>
+                    <p className="text-green-600">
+                      Tất cả balance của người dùng đều hợp lệ
+                    </p>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
