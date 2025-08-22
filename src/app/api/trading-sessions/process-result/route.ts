@@ -1,268 +1,162 @@
 import { NextResponse } from 'next/server';
 import { getMongoDb } from '@/lib/db';
 import { NextRequest } from 'next/server';
-import { ObjectId } from 'mongodb';
-import { processWinTrade, processLoseTrade, validateBalanceAfterTrade, logDetailedBalanceChange } from '@/lib/balanceUtils';
+import { processWinTrade, processLoseTrade, calculateProfit } from '@/lib/balanceUtils';
 
-// Cache để tránh xử lý trùng lặp - giảm thời gian cache
-const processingSessions = new Set<string>();
-
+// API để xử lý kết quả phiên thay thế cho cron job
 export async function POST(request: NextRequest) {
   try {
-    const { sessionId } = await request.json();
-    
-    if (!sessionId) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Session ID is required' 
-      }, { status: 400 });
-    }
-
-    // ⚡ ANTI-DUPLICATE: Kiểm tra session đang được xử lý - giảm thời gian cache
-    if (processingSessions.has(sessionId)) {
-      console.log(`⏳ Session ${sessionId} đang được xử lý, trả về kết quả ngay lập tức`);
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Session đang được xử lý, vui lòng thử lại sau',
-        data: { sessionId, status: 'processing' }
-      });
-    }
-
     const db = await getMongoDb();
     if (!db) {
-      return NextResponse.json({ 
-        success: false, 
-        message: 'Database connection failed' 
-      }, { status: 500 });
+      throw new Error('Không thể kết nối cơ sở dữ liệu');
     }
 
-    // ⚡ ANTI-DUPLICATE: Đánh dấu session đang xử lý - giảm thời gian cache
-    processingSessions.add(sessionId);
+    const now = new Date();
+    const results = {
+      processedSessions: [] as any[],
+      totalProcessed: 0,
+      errors: [] as string[],
+      timestamp: now.toISOString()
+    };
 
-    try {
-      // 1. Lấy thông tin phiên giao dịch từ database
-      const session = await db.collection('trading_sessions').findOne({ sessionId });
-      
-      if (!session) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Trading session not found' 
-        }, { status: 404 });
-      }
+    // Tìm các phiên ACTIVE đã kết thúc
+    const expiredActiveSessions = await db.collection('trading_sessions').find({
+      status: 'ACTIVE',
+      endTime: { $lte: now },
+      createdBy: { $ne: 'admin' } // Chỉ xử lý phiên không phải admin đặt
+    }).toArray();
 
-      if (session.status === 'COMPLETED') {
-        return NextResponse.json({ 
-          success: true, 
-          message: 'Session already completed',
-          data: { 
-            sessionId, 
-            status: 'completed',
-            result: session.actualResult || session.result
-          }
-        });
-      }
+    console.log(`🎯 [PROCESS] Tìm thấy ${expiredActiveSessions.length} phiên cần xử lý`);
 
-      // 2. Kiểm tra xem có kết quả được lưu sẵn không
-      if (!session.result) {
-        return NextResponse.json({ 
-          success: false, 
-          message: 'Session result not available yet' 
-        }, { status: 400 });
-      }
+    for (const session of expiredActiveSessions) {
+      try {
+        // Đối chiếu sessionId để lấy result đã có sẵn từ database
+        let sessionResult = session.result;
+        
+        // Nếu không có kết quả, tạo random kết quả
+        if (!sessionResult) {
+          console.log(`🎲 [PROCESS] Phiên ${session.sessionId} không có kết quả, tạo random kết quả`);
+          
+          // Tạo random kết quả (50% UP, 50% DOWN)
+          const random = Math.random();
+          sessionResult = random < 0.5 ? 'UP' : 'DOWN';
+          
+          // Cập nhật kết quả cho phiên
+          await db.collection('trading_sessions').updateOne(
+            { _id: session._id },
+            { 
+              $set: { 
+                result: sessionResult,
+                actualResult: sessionResult,
+                createdBy: 'system',
+                updatedAt: now
+              }
+            }
+          );
+          
+          console.log(`🎲 [PROCESS] Đã tạo random kết quả cho phiên ${session.sessionId}: ${sessionResult}`);
+        }
 
-      const finalResult = session.result; // Lấy kết quả từ database
-      console.log(`📊 Processing session ${sessionId} with result: ${finalResult}`);
-
-      // 3. Sử dụng MongoDB transaction để đảm bảo tính nhất quán - tối ưu hóa
-      const client = (db as any).client || (db as any).db?.client;
-      if (!client) {
-        throw new Error('MongoDB client not available for transaction');
-      }
-      
-      const dbSession = client.startSession();
-      
-      await dbSession.withTransaction(async () => {
-        // 4. Lấy tất cả lệnh pending của phiên này - tối ưu hóa query
-        const trades = await db.collection('trades').find({ 
-          sessionId,
+        // Tìm tất cả lệnh pending của phiên này
+        const pendingTrades = await db.collection('trades').find({
+          sessionId: session.sessionId,
           status: 'pending'
         }).toArray();
 
-        console.log(`🔍 Found ${trades.length} pending trades for session ${sessionId}`);
+        // Thống kê kết quả
+        let totalWins = 0;
+        let totalLosses = 0;
+        let totalWinAmount = 0;
+        let totalLossAmount = 0;
 
-        if (trades.length > 0) {
-          // 5. Tối ưu hóa bulk operations
-          const bulkTradesOps: any[] = [];
-          let totalWins = 0;
-          let totalLosses = 0;
-          let totalWinAmount = 0;
-          let totalLossAmount = 0;
+        // Xử lý từng lệnh một cách chính xác
+        for (const trade of pendingTrades) {
+          const isWin = trade.direction === sessionResult;
+          const profit = isWin ? calculateProfit(trade.amount, 0.9) : 0; // 10 ăn 9
 
-          // ✅ SỬA: Xử lý từng lệnh riêng biệt để tránh cộng dồn
-          for (const trade of trades) {
-            const isWin = trade.direction === finalResult;
-            const profit = isWin ? Math.floor(trade.amount * 0.9) : 0; // 90% tiền thắng (10 ăn 9)
-            
-            // Cập nhật trạng thái lệnh
-            bulkTradesOps.push({
-              updateOne: {
-                filter: { _id: trade._id },
-                update: {
-                  $set: {
-                    status: 'completed',
-                    result: isWin ? 'win' : 'lose',
-                    profit: profit,
-                    completedAt: new Date(),
-                    updatedAt: new Date()
-                  }
-                }
-              }
-            });
+          // Cập nhật trạng thái lệnh
+          const updateData = {
+            status: 'completed',
+            result: isWin ? 'win' : 'lose',
+            profit: profit,
+            completedAt: now,
+            updatedAt: now
+          };
 
-            // ✅ SỬA: Sử dụng hàm riêng biệt để xử lý balance
-            try {
-              if (isWin) {
-                // ✅ SỬA: Sử dụng hàm processWinTrade với Aggregation Pipeline
-                await processWinTrade(db, trade.userId.toString(), trade.amount, profit);
-                
-                // ✅ THÊM: Validation sau khi xử lý thắng
-                const isValid = await validateBalanceAfterTrade(db, trade.userId.toString(), trade.amount, true, profit);
-                if (!isValid) {
-                  console.error(`❌ [TRADE PROCESS] Balance không hợp lệ sau khi thắng - User: ${trade.userId}, Trade: ${trade._id}`);
-                }
-                
-                // ✅ THÊM: Log chi tiết
-                await logDetailedBalanceChange(db, trade.userId.toString(), 'WIN_TRADE', {
-                  tradeId: trade._id,
-                  sessionId: trade.sessionId,
-                  amount: trade.amount,
-                  profit: profit,
-                  direction: trade.direction,
-                  result: finalResult
-                });
-                
-                totalWins++;
-                totalWinAmount += trade.amount + profit;
-              } else {
-                // ✅ SỬA: Sử dụng hàm processLoseTrade với Aggregation Pipeline
-                await processLoseTrade(db, trade.userId.toString(), trade.amount);
-                
-                // ✅ THÊM: Validation sau khi xử lý thua
-                const isValid = await validateBalanceAfterTrade(db, trade.userId.toString(), trade.amount, false);
-                if (!isValid) {
-                  console.error(`❌ [TRADE PROCESS] Balance không hợp lệ sau khi thua - User: ${trade.userId}, Trade: ${trade._id}`);
-                }
-                
-                // ✅ THÊM: Log chi tiết
-                await logDetailedBalanceChange(db, trade.userId.toString(), 'LOSE_TRADE', {
-                  tradeId: trade._id,
-                  sessionId: trade.sessionId,
-                  amount: trade.amount,
-                  direction: trade.direction,
-                  result: finalResult
-                });
-                
-                totalLosses++;
-                totalLossAmount += trade.amount;
-              }
-            } catch (error) {
-              console.error(`❌ [TRADE PROCESS] Lỗi xử lý trade ${trade._id}:`, error);
-              throw error;
+          await db.collection('trades').updateOne(
+            { _id: trade._id },
+            { $set: updateData }
+          );
+
+          // Xử lý balance
+          try {
+            if (isWin) {
+              await processWinTrade(db, trade.userId.toString(), trade.amount, profit);
+              totalWins++;
+              totalWinAmount += trade.amount + profit;
+            } else {
+              await processLoseTrade(db, trade.userId.toString(), trade.amount);
+              totalLosses++;
+              totalLossAmount += trade.amount;
+            }
+          } catch (error) {
+            console.error(`❌ [PROCESS] Lỗi xử lý balance cho trade ${trade._id}:`, error);
+            results.errors.push(`Lỗi xử lý balance trade ${trade._id}: ${error instanceof Error ? error.message : 'Unknown error'}`);
+          }
+        }
+
+        // Đổi trạng thái từ ACTIVE sang COMPLETED sau khi tính toán xong
+        await db.collection('trading_sessions').updateOne(
+          { _id: session._id },
+          { 
+            $set: { 
+              status: 'COMPLETED',
+              totalTrades: pendingTrades.length,
+              totalWins: totalWins,
+              totalLosses: totalLosses,
+              totalWinAmount: totalWinAmount,
+              totalLossAmount: totalLossAmount,
+              completedAt: now,
+              updatedAt: now
             }
           }
+        );
 
-          // 6. Thực hiện bulk update trades - tối ưu hóa
-          if (bulkTradesOps.length > 0) {
-            await db.collection('trades').bulkWrite(bulkTradesOps, { session: dbSession });
-            console.log(`✅ Updated ${bulkTradesOps.length} trades`);
-          }
-
-          // 8. Cập nhật trạng thái phiên giao dịch
-          await db.collection('trading_sessions').updateOne(
-            { sessionId },
-            {
-              $set: {
-                status: 'COMPLETED',
-                actualResult: finalResult,
-                totalTrades: trades.length,
-                totalWins: totalWins,
-                totalLosses: totalLosses,
-                totalWinAmount: totalWinAmount,
-                totalLossAmount: totalLossAmount,
-                completedAt: new Date(),
-                updatedAt: new Date()
-              }
-            },
-            { session: dbSession }
-          );
-        } else {
-          // Không có trades nào, chỉ cập nhật trạng thái phiên
-          await db.collection('trading_sessions').updateOne(
-            { sessionId },
-            {
-              $set: {
-                status: 'COMPLETED',
-                actualResult: finalResult,
-                totalTrades: 0,
-                totalWins: 0,
-                totalLosses: 0,
-                totalWinAmount: 0,
-                totalLossAmount: 0,
-                completedAt: new Date(),
-                updatedAt: new Date()
-              }
-            },
-            { session: dbSession }
-          );
-        }
-      });
-
-      await dbSession.endSession();
-
-      // 9. Lấy thông tin phiên đã hoàn thành
-      const completedSession = await db.collection('trading_sessions').findOne({ sessionId });
-      const completedTrades = await db.collection('trades')
-        .find({ sessionId, status: 'completed' })
-        .sort({ createdAt: -1 })
-        .limit(20)
-        .toArray();
-
-      return NextResponse.json({
-        success: true,
-        message: `Session ${sessionId} processed successfully`,
-        data: {
-          sessionId,
-          status: 'completed',
-          result: finalResult,
-          session: completedSession,
-          trades: completedTrades.map(trade => ({
-            ...trade,
-            _id: trade._id.toString(),
-            userId: trade.userId.toString()
-          }))
-        }
-      });
-
-    } catch (error) {
-      console.error(`❌ Error processing session ${sessionId}:`, error);
-      return NextResponse.json({
-        success: false,
-        message: 'Error processing session',
-        error: error instanceof Error ? error.message : 'Unknown error'
-      }, { status: 500 });
-    } finally {
-      // ⚡ ANTI-DUPLICATE: Xóa session khỏi cache sau 5 giây thay vì ngay lập tức
-      setTimeout(() => {
-        processingSessions.delete(sessionId);
-      }, 5000);
+        results.processedSessions.push({
+          sessionId: session.sessionId,
+          action: 'ACTIVE_TO_COMPLETED',
+          oldStatus: 'ACTIVE',
+          newStatus: 'COMPLETED',
+          result: sessionResult,
+          totalTrades: pendingTrades.length,
+          totalWins: totalWins,
+          totalLosses: totalLosses,
+          totalWinAmount: totalWinAmount,
+          totalLossAmount: totalLossAmount,
+          endTime: session.endTime,
+          timeExpired: Math.floor((now.getTime() - session.endTime.getTime()) / 1000)
+        });
+        
+        results.totalProcessed++;
+        
+      } catch (error) {
+        const errorMsg = `Lỗi khi xử lý phiên ACTIVE ${session.sessionId}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+        results.errors.push(errorMsg);
+        console.error(errorMsg);
+      }
     }
 
-  } catch (error) {
-    console.error('❌ Error in process-result API:', error);
     return NextResponse.json({
-      success: false,
-      message: 'Internal server error',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, { status: 500 });
+      success: true,
+      message: `Process result hoàn thành: Xử lý ${results.totalProcessed} phiên`,
+      results
+    });
+
+  } catch (error) {
+    console.error('Lỗi trong process result:', error);
+    return NextResponse.json(
+      { success: false, message: 'Lỗi máy chủ nội bộ', error: error instanceof Error ? error.message : 'Unknown error' },
+      { status: 500 }
+    );
   }
 } 

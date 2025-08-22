@@ -377,57 +377,124 @@ export default function TradePage() {
       // Bắt đầu countdown 12 giây
       setUpdateCountdown(12); // Giữ nguyên 12 giây để tạo kịch tính
       
-      // ✅ SỬA: Hàm cập nhật sau 12 giây - TẤT CẢ CÙNG LÚC để tạo kịch tính
-      const updateAfterDelay = async () => {
-        try {
-          // ✅ TẮT: Log bắt đầu cập nhật để giảm spam
-          // console.log('🎬 Bắt đầu cập nhật kết quả sau 12 giây kịch tính...');
-          
-          // Cập nhật lịch sử giao dịch
-          const tradeHistoryResponse = await fetch('/api/trades/history', {
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('authToken')}`
+             // ✅ OPTION 1: Xử lý kết quả ngay lập tức khi timer = 0
+               const processSessionResults = async () => {
+          try {
+            // ✅ TẮT: Log bắt đầu để giảm spam
+            // console.log('🎬 Bắt đầu xử lý kết quả phiên...');
+            
+            // ✅ BƯỚC 1: Trigger session processing ngay lập tức
+            let sessionProcessed = false;
+            for (let i = 0; i < 3; i++) {
+              try {
+                const sessionResponse = await fetch('/api/trading-sessions/process-result', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' }
+                });
+                if (sessionResponse.ok) {
+                  const sessionData = await sessionResponse.json();
+                  // ✅ TẮT: Log session processed để giảm spam
+                  // console.log('✅ Session processed:', sessionData.message);
+                  sessionProcessed = true;
+                  break;
+                }
+              } catch (error) {
+                console.error(`❌ Session processing attempt ${i + 1} failed:`, error);
+                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
             }
-          });
-
-          if (tradeHistoryResponse.ok) {
-            const tradeHistoryData = await tradeHistoryResponse.json();
-            if (tradeHistoryData.trades && tradeHistoryData.trades.length > 0) {
-              const formattedTrades: TradeHistoryRecord[] = tradeHistoryData.trades.map((trade: any) => ({
-                id: trade._id || trade._id.toString(),
-                sessionId: trade.sessionId,
-                direction: trade.direction,
-                amount: trade.amount,
-                status: trade.status || 'pending',
-                result: trade.result,
-                profit: trade.profit || 0,
-                createdAt: trade.createdAt || new Date().toISOString(),
-              }));
-
-              setTradeHistory(formattedTrades);
-              // ✅ TẮT: Log cập nhật lịch sử giao dịch để giảm spam
-              // console.log('📊 Đã cập nhật lịch sử giao dịch');
+            
+            if (!sessionProcessed) {
+              console.error('❌ Không thể process sessions sau 3 lần thử');
             }
+            
+            // ✅ TẮT: Log hoàn thành để giảm spam
+            // console.log('🎉 Hoàn thành xử lý kết quả phiên!');
+          } catch (error) {
+            console.error('❌ Lỗi khi xử lý kết quả phiên:', error);
           }
+        };
 
-          // Sync balance sau khi phiên kết thúc
-          await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync);
-          // ✅ TẮT: Log cập nhật số dư để giảm spam
-          // console.log('💰 Đã cập nhật số dư');
-          
-          // ✅ TẮT: Log hoàn thành cập nhật kết quả để giảm spam
-          // console.log('🎉 Hoàn thành cập nhật kết quả!');
-        } catch (error) {
-          console.error('Lỗi khi cập nhật sau 12 giây:', error);
-        } finally {
-          setUpdateCountdown(null);
-          setCountdownStarted(false); // Reset để có thể bắt đầu countdown mới
-          setIsBalanceLocked(false); // Unlock balance sau khi sync xong
-        }
-      };
+       // ✅ BƯỚC 1: Xử lý kết quả ngay lập tức
+       processSessionResults();
+       
+               // ✅ BƯỚC 2: Cập nhật UI sau 12 giây để tạo kịch tính
+        const updateUIAfterDelay = async () => {
+          try {
+            // ✅ TẮT: Log bắt đầu cập nhật UI để giảm spam
+            // console.log('🎬 Bắt đầu cập nhật UI sau 12 giây kịch tính...');
+            
+            // ✅ BƯỚC 1: Cập nhật lịch sử giao dịch với retry
+            let tradeHistoryUpdated = false;
+            for (let i = 0; i < 3; i++) {
+              try {
+                const tradeHistoryResponse = await fetch('/api/trades/history', {
+                  headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` }
+                });
 
-      // Chờ 12 giây rồi cập nhật TẤT CẢ (giữ nguyên để tạo kịch tính)
-      setTimeout(updateAfterDelay, 12000);
+                if (tradeHistoryResponse.ok) {
+                  const tradeHistoryData = await tradeHistoryResponse.json();
+                  if (tradeHistoryData.trades && tradeHistoryData.trades.length > 0) {
+                    const formattedTrades: TradeHistoryRecord[] = tradeHistoryData.trades.map((trade: any) => ({
+                      id: trade._id || trade._id.toString(),
+                      sessionId: trade.sessionId,
+                      direction: trade.direction,
+                      amount: trade.amount,
+                      status: trade.status || 'pending',
+                      result: trade.result,
+                      profit: trade.profit || 0,
+                      createdAt: trade.createdAt || new Date().toISOString(),
+                    }));
+
+                    setTradeHistory(formattedTrades);
+                    // ✅ TẮT: Log trade history updated để giảm spam
+                    // console.log('✅ Trade history updated');
+                    tradeHistoryUpdated = true;
+                    break;
+                  }
+                }
+              } catch (error) {
+                console.error(`❌ Trade history update attempt ${i + 1} failed:`, error);
+                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+            
+            if (!tradeHistoryUpdated) {
+              console.error('❌ Không thể cập nhật trade history sau 3 lần thử');
+            }
+
+            // ✅ BƯỚC 2: Sync balance với retry
+            let balanceSynced = false;
+            for (let i = 0; i < 3; i++) {
+              try {
+                await syncBalance(setBalance, setIsSyncingBalance, true, setLastBalanceSync, true);
+                // ✅ TẮT: Log balance synced để giảm spam
+                // console.log('✅ Balance synced');
+                balanceSynced = true;
+                break;
+              } catch (error) {
+                console.error(`❌ Balance sync attempt ${i + 1} failed:`, error);
+                if (i < 2) await new Promise(resolve => setTimeout(resolve, 1000));
+              }
+            }
+            
+            if (!balanceSynced) {
+              console.error('❌ Không thể sync balance sau 3 lần thử');
+            }
+            
+            // ✅ TẮT: Log hoàn thành cập nhật UI để giảm spam
+            // console.log('🎉 Hoàn thành cập nhật UI sau 12 giây!');
+          } catch (error) {
+            console.error('Lỗi khi cập nhật UI sau 12 giây:', error);
+          } finally {
+            setUpdateCountdown(null);
+            setCountdownStarted(false);
+            setIsBalanceLocked(false);
+          }
+        };
+
+       // ✅ BƯỚC 2: Chờ 12 giây rồi cập nhật UI
+       setTimeout(updateUIAfterDelay, 12000);
 
       // ✅ ĐÃ XÓA: Smart polling cho trade results (đã xóa API check-results)
       // Cron job sẽ tự động xử lý kết quả khi phiên kết thúc

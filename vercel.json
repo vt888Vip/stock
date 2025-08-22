@@ -1,9 +1,4 @@
 {
-  "crons": [
-    {
-      "path": "/api/cron/process-sessions",
-      "schedule": "* * * * *"
-    }
-  ]
+  "crons": []
 }
 
